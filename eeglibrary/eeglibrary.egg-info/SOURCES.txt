@@ -1,0 +1,14 @@
+README.md
+setup.py
+eeglibrary/__init__.py
+eeglibrary.egg-info/PKG-INFO
+eeglibrary.egg-info/SOURCES.txt
+eeglibrary.egg-info/dependency_links.txt
+eeglibrary.egg-info/top_level.txt
+eeglibrary/src/EEG.py
+eeglibrary/src/__init__.py
+eeglibrary/src/eeg_dataloader.py
+eeglibrary/src/eeg_dataset.py
+eeglibrary/src/eeg_loader.py
+eeglibrary/src/eeg_parser.py
+eeglibrary/src/model.py

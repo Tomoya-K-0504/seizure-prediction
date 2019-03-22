@@ -1,4 +1,4 @@
-from eeglibrary import eeg_loader
+from eeglibrary.src import eeg_loader
 import numpy as np
 import scipy.signal
 
@@ -8,13 +8,14 @@ windows = {'hamming': scipy.signal.hamming, 'hann': scipy.signal.hann, 'blackman
 
 
 class EEGParser:
-    def __init__(self, eeg_conf, normalize=False, augment=False):
+    def __init__(self, eeg_conf, spect=False, normalize=False, augment=False):
         self.mat_col = eeg_conf['mat_col']
-        self.window_stride = eeg_conf['window_stride']
-        self.window_size = eeg_conf['window_size']
         self.sample_rate = eeg_conf['sample_rate']
-        self.wave_split_sec = eeg_conf['wave_split_sec']
-        self.window = windows.get(eeg_conf['window'], windows['hamming'])
+        self.spect = spect
+        if self.spect:
+            self.window_stride = eeg_conf['window_stride']
+            self.window_size = eeg_conf['window_size']
+            self.window = windows.get(eeg_conf['window'], windows['hamming'])
         self.normalize = normalize
         self.augment = augment
 

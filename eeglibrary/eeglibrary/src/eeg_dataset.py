@@ -1,5 +1,5 @@
 from torch.utils.data import Dataset
-from eeglibrary.eeg_parser import EEGParser
+from eeglibrary.src.eeg_parser import EEGParser
 
 
 class EEGDataSet(Dataset, EEGParser):

@@ -1,11 +1,6 @@
-import os, sys, pdb, time
-from pathlib import Path
 import copy
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import scipy.signal
 import pickle
+import numpy as np
 
 
 FILE_FORMAT = ['.mat']
@@ -27,7 +22,7 @@ class EEG:
         self.values = values
         self.channel_list = channel_list
         self.len_sec = len_sec
-        self.sr = sr
+        self.sr = int(sr)
         self.header = header
 
     def info(self):
@@ -53,38 +48,37 @@ class EEG:
         with open(file_path, mode='wb') as f:
             pickle.dump(self, f)
 
-    def split(self, window_size=0.5, window_stride=0.0, padding=0.0) -> list:
-        n_eeg = (self.len_sec - window_size) // window_stride
-        if padding == 'same':
-            padding = (self.len_sec - (n_eeg * window_stride + window_size)) / 2
-        else:
-            n_eeg = (self.len_sec + padding * 2 - window_size) // window_stride
+    def split(self, window_size=0.5, window_stride='same', padding='same') -> list:
+        assert float(window_size) != 0.0, 'window_size must be over 0.'
+
+        def validate_values(window_stride, padding):
+            if window_stride == 'same' or float(window_stride) == 0.0:
+                window_stride = window_size
+
+            n_eeg = (self.len_sec - window_size) // window_stride + 1
+
+            if padding == 'same':
+                padding = (self.len_sec - n_eeg * window_stride) // 2
+            else:
+                n_eeg = (self.len_sec + padding * 2 - window_size) // window_stride
+
+            return int(n_eeg), window_stride, padding
+
+        n_eeg, window_stride, padding = validate_values(window_stride, padding)
 
         # add padding
-        padded_waves = self.values
+        n_channel = len(self.channel_list)
+        pad_matrix = np.zeros((n_channel, int(padding * self.sr)))
+        if padding:
+            padded_waves = np.hstack((pad_matrix, self.values, pad_matrix))
 
         splitted_eegs = []
-
+        duration = int(window_size * self.sr)
         for i in range(n_eeg):
             eeg = copy.deepcopy(self)
-            eeg.values = self.values[i * self.sr * window_size:(i + 1) * self.sr * window_size]
+            start_index = int(i * self.sr * window_stride)
+            eeg.values = self.values[:, start_index:start_index + duration]
             eeg.len_sec = window_size
             splitted_eegs.append(eeg)
 
         return splitted_eegs
-
-
-if __name__ == '__main__':
-    from pathlib import Path
-    from eeglibrary import eeg_parser
-    data_dir = Path('../input')
-    eeg_conf = dict(sample_rate=16000,
-                    window_size=0.02,
-                    window_stride=0.01,
-                    window='hamming',
-                    wave_split_sec=2.0,
-                    noise_dir=None,
-                    noise_prob=0.4,
-                    noise_levels=(0.0, 0.5))
-
-    eeg = eeg_parser.EEGParser(eeg_conf).parse_eeg('/home/tomoya/workspace/kaggle/seizure-prediction/input/Dog_1/train')
