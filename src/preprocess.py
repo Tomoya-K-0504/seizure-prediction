@@ -8,6 +8,7 @@ import scipy.signal
 import pickle
 import argparse
 from tqdm import tqdm
+from multiprocessing import Process, Queue
 subject_dir_names = ['Dog_1', 'Dog_2', 'Dog_3', 'Dog_4', 'Dog_5', 'Patient_1', 'Patient_2']
 partial_name_list = ['train', 'val', 'test']
 class_names = ['preictal', 'interictal']
@@ -28,7 +29,7 @@ def set_args():
     return parser.parse_args()
 
 
-def data_split(args, wave) -> list:
+def data_split(wave, out_dir) -> list:
     """
     1. load eeg
     2. split
@@ -37,6 +38,7 @@ def data_split(args, wave) -> list:
     :return:
     """
     mat_col = wave.name[:-8] + str(int(wave.name[-8:-4]))
+    Path(out_dir / mat_col).mkdir(exist_ok=True)
     eeg = from_mat(wave, mat_col)
     out_paths = []
 
@@ -44,51 +46,63 @@ def data_split(args, wave) -> list:
     for i, eeg in enumerate(splitted_eeg):
         # print(eeg.values.shape[1])
         # assert eeg.values.shape[1] == 399, "eeg don't have enough length, which is 399"
-        patient_dir = Path(args.out_dir) / '_'.join(mat_col.split('_')[:2])
-        Path(patient_dir).mkdir(exist_ok=True)
-        out_file = Path(args.out_dir) / patient_dir / '{}_{}.pkl'.format(mat_col, i*eeg.sr)
+        out_file = Path(out_dir / mat_col / '{}.pkl'.format(i*eeg.sr))
         eeg.to_pkl(out_file)
         out_paths.append(out_file.resolve())
 
     return out_paths
 
 
-def make_manifest(args, wave_paths) -> None:
+def make_manifest(out_dir, wave_paths) -> None:
     """
     1. wave_pathsからtrainとtestを分ける
     2. csvにしてout_dirに保存
     :return:
     """
-    for part in list(wave_paths.keys()):
-        pd.DataFrame(wave_paths[part]).to_csv('{}/{}_manifest.csv'.format(args.out_dir, part))
+    for part in wave_paths.keys():
+        pd.DataFrame(wave_paths[part]).to_csv('{}/{}_manifest.csv'.format(out_dir, part), header=None, index=False)
 
 
-def preprocess(args):
+def preprocess(args, patient_path):
     """
     1. for each wave data in each patient,
        data split with args.length and save to args.out_dir
     2. make manifessts
     TODO - multi processing
     """
-    def initialize_folders(args):
+    def initialize_folders(args, patient_name):
         assert Path(args.patients_dir).is_dir()
-        Path(args.out_dir).mkdir(parents=True, exist_ok=True)
+        Path(args.out_dir + '/' + patient_name).mkdir(parents=True, exist_ok=True)
+        return Path(args.out_dir + '/' + patient_name)
 
-    def remove_mac_folder(paths):
-        return [p for p in paths if not p.name.startswith('.')]
+    out_dir = initialize_folders(args, patient_path.name)
 
-    initialize_folders(args)
     wave_paths = {part: [] for part in partial_name_list}
-    for patient in remove_mac_folder(list(Path(args.patients_dir).iterdir())):
-        partials = remove_mac_folder(list(Path(patient).iterdir()))
-        for part in partials:
-            waves = remove_mac_folder(list(Path(part).iterdir()))
-            for wave in tqdm(waves):
-                wave_paths[part.name].extend(data_split(args, wave))
+    partials = Path(patient_path).iterdir()
+    for part in partials:
+        print('{} of {} is now processing...'.format(part.name, patient_path.name))
+        waves = Path(part).iterdir()
+        for wave in tqdm(waves):
+            wave_paths[part.name].extend(data_split(wave, out_dir))
 
-    make_manifest(args, wave_paths)
+    make_manifest(out_dir, wave_paths)
+
+
+def remove_mac_folder(path):
+    # dirがあればremove_mac_folderを呼び、すべてファイルならば .で始まるファイルを削除
+    folders = [p for p in Path(path).iterdir() if p.is_dir()]
+    if folders:
+        [remove_mac_folder(p) for p in folders]
+
+    [p.unlink() for p in Path(path).iterdir() if p.name.startswith('.')]
 
 
 if __name__ == '__main__':
     args = set_args()
-    preprocess(args)
+    remove_mac_folder(args.patients_dir)
+    proc_list = []
+    for patient in Path(args.patients_dir).iterdir():
+        p = Process(target=preprocess, args=(args, patient, ))
+        p.start()
+        proc_list.append(p)
+    [p.join() for p in proc_list]
