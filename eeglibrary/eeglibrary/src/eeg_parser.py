@@ -1,6 +1,8 @@
 from eeglibrary.src import eeg_loader
 import numpy as np
 import scipy.signal
+import librosa
+import torch
 
 
 windows = {'hamming': scipy.signal.hamming, 'hann': scipy.signal.hann, 'blackman': scipy.signal.blackman,
@@ -24,7 +26,25 @@ class EEGParser:
             raise NotImplementedError
         else:
             eeg = eeg_loader.from_mat(eeg_path, mat_col='')
-            eegs = eeg.split(self.wave_split_sec)
-            y = [eeg.split(self.window_size, self.window_stride) for eeg in eegs]
+
+        if self.spect:
+            y = self.to_spect(eeg)
 
         return y
+
+    def to_spect(self, eeg):
+        n_fft = int(eeg.sample_rate * self.window_size)
+        win_length = n_fft
+        hop_length = int(eeg.sample_rate * self.window_stride)
+        # STFT
+        D = librosa.stft(y, n_fft=n_fft, hop_length=hop_length,
+                         win_length=win_length, window=self.window)
+        spect, phase = librosa.magphase(D)
+        spect = torch.FloatTensor(spect)
+        if self.normalize:
+            mean = spect.mean()
+            std = spect.std()
+            spect.add_(-mean)
+            spect.div_(std)
+
+        return spect

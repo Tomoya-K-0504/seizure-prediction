@@ -49,3 +49,11 @@ class TestEEG(TestCase):
                         self.eeg.split(window_size, window_stride, padding)
                     except AssertionError as e:
                         continue
+
+    def test_resample(self):
+        upsampled = self.eeg.resample(int(self.eeg.sr) * 2)
+        self.assertEqual(upsampled .shape[1] // self.eeg.len_sec, int(self.eeg.sr) * 2)
+
+        donwsampled = self.eeg.resample(int(self.eeg.sr) // 2)
+        self.assertEqual(donwsampled.shape[1] // self.eeg.len_sec, int(self.eeg.sr) // 2)
+

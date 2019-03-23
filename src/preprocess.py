@@ -1,19 +1,13 @@
-import os, sys, pdb, time
-from pathlib import Path
-import copy
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import scipy.signal
-import pickle
 import argparse
-from tqdm import tqdm
-from multiprocessing import Process, Queue
+from multiprocessing import Process
+from pathlib import Path
+
+import pandas as pd
+
 subject_dir_names = ['Dog_1', 'Dog_2', 'Dog_3', 'Dog_4', 'Dog_5', 'Patient_1', 'Patient_2']
 partial_name_list = ['train', 'val', 'test']
 class_names = ['preictal', 'interictal']
 
-from eeglibrary import EEG
 from eeglibrary import from_mat
 
 
@@ -49,7 +43,7 @@ def data_split(wave, out_dir) -> list:
         out_file = Path(out_dir / mat_col / '{}.pkl'.format(i*eeg.sr))
         eeg.to_pkl(out_file)
         out_paths.append(out_file.resolve())
-
+        break
     return out_paths
 
 
@@ -82,8 +76,9 @@ def preprocess(args, patient_path):
     for part in partials:
         print('{} of {} is now processing...'.format(part.name, patient_path.name))
         waves = Path(part).iterdir()
-        for wave in tqdm(waves):
+        for wave in waves:
             wave_paths[part.name].extend(data_split(wave, out_dir))
+            break
 
     make_manifest(out_dir, wave_paths)
 
@@ -97,6 +92,21 @@ def remove_mac_folder(path):
     [p.unlink() for p in Path(path).iterdir() if p.name.startswith('.')]
 
 
+def compile_manifests(args):
+    patient_folders = [p for p in Path(args.out_dir).iterdir() if p.name[0] in ['D', 'P']]
+    manifest_paths = {part: [] for part in partial_name_list}
+    Path('{}/manifests'.format(args.out_dir)).mkdir(exist_ok=True)
+
+    for part in partial_name_list:
+        df = pd.DataFrame()
+        _ = patient_folders[0] / '{}_manifest.csv'.format(part)
+        part_manifest_paths = [p / '{}_manifest.csv'.format(part) for p in patient_folders]
+        for part_manifest_path in part_manifest_paths:
+            df = df.append(pd.read_csv(part_manifest_path, header=None))
+            # part_manifest_path.unlink()
+        df.to_csv('{}/manifests/{}_manifest.csv'.format(args.out_dir, part), header=None, index=False)
+
+
 if __name__ == '__main__':
     args = set_args()
     remove_mac_folder(args.patients_dir)
@@ -106,3 +116,5 @@ if __name__ == '__main__':
         p.start()
         proc_list.append(p)
     [p.join() for p in proc_list]
+
+    compile_manifests(args)
