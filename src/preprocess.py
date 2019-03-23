@@ -1,4 +1,3 @@
-import argparse
 from multiprocessing import Process
 from pathlib import Path
 
@@ -9,18 +8,7 @@ partial_name_list = ['train', 'val', 'test']
 class_names = ['preictal', 'interictal']
 
 from eeglibrary import from_mat
-
-
-def set_args():
-    parser = argparse.ArgumentParser(description='DeepSpeech training')
-    parser.add_argument('--out-dir', metavar='DIR',
-                        help='directory to save splitted data', default='input/splitted')
-    parser.add_argument('--patients-dir', metavar='DIR',
-                        help='directory where patients data placed', default='input/splitted')
-    parser.add_argument('--duration', type=float,
-                        help='duration of one splitted wave', default=1.0)
-
-    return parser.parse_args()
+from args import preprocess_args
 
 
 def data_split(wave, out_dir) -> list:
@@ -43,7 +31,7 @@ def data_split(wave, out_dir) -> list:
         out_file = Path(out_dir / mat_col / '{}.pkl'.format(i*eeg.sr))
         eeg.to_pkl(out_file)
         out_paths.append(out_file.resolve())
-        
+
     return out_paths
 
 
@@ -78,7 +66,7 @@ def preprocess(args, patient_path):
         waves = Path(part).iterdir()
         for wave in waves:
             wave_paths[part.name].extend(data_split(wave, out_dir))
-
+            break
     make_manifest(out_dir, wave_paths)
 
 
@@ -107,7 +95,7 @@ def compile_manifests(args):
 
 
 if __name__ == '__main__':
-    args = set_args()
+    args = preprocess_args()
     remove_mac_folder(args.patients_dir)
     proc_list = []
     for patient in Path(args.patients_dir).iterdir():
