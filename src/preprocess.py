@@ -43,7 +43,7 @@ def data_split(wave, out_dir) -> list:
         out_file = Path(out_dir / mat_col / '{}.pkl'.format(i*eeg.sr))
         eeg.to_pkl(out_file)
         out_paths.append(out_file.resolve())
-        break
+        
     return out_paths
 
 
@@ -78,7 +78,6 @@ def preprocess(args, patient_path):
         waves = Path(part).iterdir()
         for wave in waves:
             wave_paths[part.name].extend(data_split(wave, out_dir))
-            break
 
     make_manifest(out_dir, wave_paths)
 
