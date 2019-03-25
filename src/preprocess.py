@@ -64,9 +64,14 @@ def preprocess(args, patient_path):
     for part in partials:
         print('{} of {} is now processing...'.format(part.name, patient_path.name))
         waves = Path(part).iterdir()
+        # prev_classes = []
         for wave in waves:
+            # class_name = wave.name.split('_')[2]
+            # if class_name in prev_classes:
+            #     continue
+            # prev_classes.append(class_name)
             wave_paths[part.name].extend(data_split(wave, out_dir))
-            break
+
     make_manifest(out_dir, wave_paths)
 
 
@@ -102,6 +107,7 @@ if __name__ == '__main__':
         p = Process(target=preprocess, args=(args, patient, ))
         p.start()
         proc_list.append(p)
+
     [p.join() for p in proc_list]
 
     compile_manifests(args)

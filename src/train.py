@@ -21,12 +21,14 @@ import random
 random.seed(seed)
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset, DataLoader
+from torch.utils.data.sampler import WeightedRandomSampler
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
 from torchvision import models, transforms, utils
 
-from eeglibrary import EEG, EEGDataSet, EEGDataLoader, EEGParser, cnn_v1
+from eeglibrary import EEG, EEGDataSet, EEGDataLoader, make_weights_for_balanced_classes
+from eeglibrary.models.CNN import *
 from args import train_args
 from utils import AverageMeter
 
@@ -52,7 +54,11 @@ def init_seed(args):
 
 
 def set_model(args):
-    model = cnn_v1(in_channel=1, n_labels=len(class_names))
+    if args.model_name == 'cnn_1_16_399':
+        model = cnn_1_16_399(n_labels=len(class_names))
+    if args.model_name == 'cnn_16_751_751':
+        model = cnn_16_751_751(n_labels=len(class_names))
+
     print(model)
 
     return model
@@ -69,23 +75,32 @@ def set_eeg_conf(args):
 
 def set_dataloaders(args, eeg_conf):
     manifests = [args.train_manifest, args.val_manifest, args.test_manifest]
-    datasets = {part: EEGDataSet(manifest, class_names, eeg_conf) for part, manifest in zip(partial_name_list, manifests)}
 
-    data_transforms = {
-        'train': transforms.Compose([
-            transforms.ToTensor(),
-        ]),
-        'val': transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ]),
-    }
-
-    dataloaders = {part: EEGDataLoader(datasets[part], batch_size=args.batch_size, num_workers=args.num_workers)
-                   for part in partial_name_list}
+    dataloaders = {}
+    for part, manifest in zip(partial_name_list, manifests):
+        if part in ['train', 'val']:
+            dataset = EEGDataSet(manifest, eeg_conf, class_names)
+            weights = make_weights_for_balanced_classes(dataset.labels_index(), len(class_names))
+            sampler = WeightedRandomSampler(weights, args.batch_size)
+            dataloaders[part] = EEGDataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers,
+                                              shuffle=False, sampler=sampler)
+        else:
+            dataset = EEGDataSet(manifest, eeg_conf)
+            dataloaders[part] = EEGDataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers,
+                                              pin_memory=True, shuffle=False)
     return dataloaders
+
+    # data_transforms = {
+    #     'train': transforms.Compose([
+    #         transforms.ToTensor(),
+    #     ]),
+    #     'val': transforms.Compose([
+    #         transforms.Resize(256),
+    #         transforms.CenterCrop(224),
+    #         transforms.ToTensor(),
+    #         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    #     ]),
+    # }
 
 
 if __name__ == '__main__':
@@ -99,7 +114,7 @@ if __name__ == '__main__':
 
     roc_results, prec_results, rec_results = torch.Tensor(args.epochs), torch.Tensor(args.epochs), torch.Tensor(
         args.epochs)
-    best_roc = None
+    best_loss = 100000.0
     avg_loss, avg_auc, start_epoch, start_iter, optim_state = 0, 0, 0, 0, None
 
     model = set_model(args)
@@ -144,7 +159,9 @@ if __name__ == '__main__':
                         optimizer.step()
 
                 avg_loss += loss.item()
-                avg_auc += metrics.auc(labels, pred_prob.detach().numpy())
+                if device == 'cuda':
+                    pred_prob = pred_prob.cpu()
+                avg_auc += metrics.auc(labels.cpu(), pred_prob.cpu().detach().numpy())
                 losses.update(loss.item(), inputs.size(0))
 
                 # measure elapsed time
@@ -155,11 +172,11 @@ if __name__ == '__main__':
                           'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                           'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                           'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(
-                        (epoch + 1), (i + 1), 300, batch_time=batch_time, data_time=data_time, loss=losses))
+                        (epoch + 1), (i + 1), len(dataloaders[phase]), batch_time=batch_time, data_time=data_time, loss=losses))
 
             # deep copy the model
-            # if phase == 'val' and epoch_acc > best_acc:
-            #     best_acc = epoch_acc
-            #     best_model_wts = copy.deepcopy(model.state_dict())
+            if phase == 'val' and losses.avg >= best_loss:
+                best_acc = losses.avg
+                best_model_wts = copy.deepcopy(model.state_dict())
 
 
