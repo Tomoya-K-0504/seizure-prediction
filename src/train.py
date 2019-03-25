@@ -61,7 +61,7 @@ def set_model(args, eeg_conf):
         model = cnn_16_751_751(n_labels=len(class_names))
     if args.model_name == 'rnn_16_751_751':
         cnn, out_ftrs = cnn_ftrs_16_751_751(n_labels=len(class_names))
-        model = RNN(cnn, out_ftrs, args.rnn_type, class_names, eeg_conf=eeg_conf)
+        model = RNN(cnn, out_ftrs, args.batch_size, args.rnn_type, class_names, eeg_conf=eeg_conf)
     else:
         raise NotImplementedError
 
