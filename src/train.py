@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.signal
 import pickle
-
+from tqdm import tqdm
 import torch
 from torch import nn
 import torchvision
@@ -89,24 +89,12 @@ def set_dataloaders(args, eeg_conf):
             weights = make_weights_for_balanced_classes(dataset.labels_index(), len(class_names))
             sampler = WeightedRandomSampler(weights, args.batch_size)
             dataloaders[part] = EEGDataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers,
-                                              shuffle=False, sampler=sampler)
+                                              pin_memory=True, shuffle=False, sampler=sampler)
         else:
-            dataset = EEGDataSet(manifest, eeg_conf)
+            dataset = EEGDataSet(manifest, eeg_conf, return_path=True)
             dataloaders[part] = EEGDataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers,
                                               pin_memory=True, shuffle=False)
     return dataloaders
-
-    # data_transforms = {
-    #     'train': transforms.Compose([
-    #         transforms.ToTensor(),
-    #     ]),
-    #     'val': transforms.Compose([
-    #         transforms.Resize(256),
-    #         transforms.CenterCrop(224),
-    #         transforms.ToTensor(),
-    #         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    #     ]),
-    # }
 
 
 if __name__ == '__main__':
@@ -118,10 +106,10 @@ if __name__ == '__main__':
 
     Path(args.model_dir).mkdir(exist_ok=True)
 
-    roc_results, prec_results, rec_results = torch.Tensor(args.epochs), torch.Tensor(args.epochs), torch.Tensor(
-        args.epochs)
-    best_loss = 100000.0
-    avg_loss, avg_auc, start_epoch, start_iter, optim_state = 0, 0, 0, 0, None
+    start_epoch, start_iter, optim_state = 0, 0, None
+    best_loss, best_auc, losses, aucs = {}, {}, {}, {}
+    for phase in ['train', 'val']:
+        best_loss[phase], best_auc[phase], losses[phase], aucs[phase] = 1000, 0, AverageMeter(), AverageMeter()
 
     eeg_conf = set_eeg_conf(args)
     model = set_model(args, eeg_conf)
@@ -133,22 +121,15 @@ if __name__ == '__main__':
                                 momentum=args.momentum, nesterov=True, weight_decay=1e-5)
 
     criterion = nn.BCELoss()
-    batch_time, data_time, losses = AverageMeter(), AverageMeter(), AverageMeter()
-
-    # for a in dataloaders['train']:
-    #     b = ''
+    batch_time = AverageMeter()
 
     for epoch in range(start_epoch, args.epochs):
+        break
         end = time.time()
         start_epoch_time = time.time()
 
         for phase in ['train', 'val']:
-            #         if phase == 'train':
-            #             scheduler.step()
-
-            for i, (inputs, labels) in enumerate(dataloaders[phase]):
-                # measure data loading time
-                data_time.update(time.time() - end)
+            for i, (inputs, labels) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
                 inputs = inputs.to(device)
                 labels = labels.to(device)
 
@@ -164,25 +145,77 @@ if __name__ == '__main__':
                         loss.backward()
                         optimizer.step()
 
-                avg_loss += loss.item()
-                if device == 'cuda':
-                    pred_prob = pred_prob.cpu()
-                avg_auc += metrics.auc(labels.cpu(), pred_prob.cpu().detach().numpy())
-                losses.update(loss.item(), inputs.size(0))
+                losses[phase].update(loss.item() / inputs.size(0), inputs.size(0))
+                aucs[phase].update(
+                    metrics.auc(labels.cpu(), pred_prob.cpu().detach().numpy()) / inputs.size(0),
+                    inputs.size(0)
+                )
 
                 # measure elapsed time
                 batch_time.update(time.time() - end)
                 end = time.time()
-                if True:  # not args.silent:
-                    print('Epoch: [{0}][{1}/{2}]\t'
-                          'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                          'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                          'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(
-                        (epoch + 1), (i + 1), len(dataloaders[phase]), batch_time=batch_time, data_time=data_time, loss=losses))
+                if not args.silent:
+                    if phase == 'val':
+                        print('validation results')
+                    print('Epoch: [{0}][{1}/{2}] \tTime {batch_time.val:.3f} ({batch_time.avg:.3f}) \t'
+                          'AUC {auc.val:.3f} ({auc.avg:.3f}) \tLoss {loss.val:.4f} ({loss.avg:.4f}) \t'.format(
+                            epoch, (i + 1), len(dataloaders[phase]), batch_time=batch_time,
+                            auc=aucs[phase], loss=losses[phase]))
 
-            # deep copy the model
-            if phase == 'val' and losses.avg >= best_loss:
-                best_acc = losses.avg
-                best_model_wts = copy.deepcopy(model.state_dict())
+            if losses[phase].avg < best_loss[phase]:
+                best_loss[phase] = losses[phase].avg
 
+            if aucs[phase].avg < best_auc[phase]:
+                best_auc[phase] = aucs[phase].avg
+                if phase == 'val':
+                    print("Found better validated model, saving to %s" % args.model_path)
+                    torch.save(
+                        RNN.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
+                                             wer_results=wer_results, cer_results=cer_results)
+                        , args.model_path)
 
+                    # if not args.no_shuffle:
+                    #     print("Shuffling batches...")
+                    #     train_sampler.shuffle(epoch)
+
+            # anneal lr
+            param_groups = optimizer.param_groups
+            for g in param_groups:
+                g['lr'] = g['lr'] / args.learning_anneal
+            print('Learning rate annealed to: {lr:.6f}'.format(lr=g['lr']))
+
+            losses[phase].reset()
+            aucs[phase].reset()
+
+    # test phase
+    pred_list = []
+    path_list = []
+    for i, (inputs, paths) in tqdm(enumerate(dataloaders['test']), total=len(dataloaders['test'])):
+        inputs = inputs.to(device)
+
+        outputs = model(inputs)
+        _, preds = torch.max(outputs, 1)
+        pred_list.extend(preds)
+        path_list.extend(paths)
+        break
+
+    def ensemble_preds(pred_list, path_list, sub_df):
+        # もともとのmatファイルごとに振り分け直す
+        patient_name = path_list[0].split('/')[-3]
+        orig_mat_list = sub_df[sub_df['clip'].apply(lambda x: '_'.join(x.split('_')[:2])) == patient_name]
+        ensembled_pred_list = []
+        for orig_mat_name in orig_mat_list['clip']:
+            _ = int(path_list[0].split('/')[-2].split('_')[-1])
+            seg_number = int(orig_mat_name[-8:-4])
+            one_segment_preds = [pred for path, pred in zip(path_list, pred_list) if
+                                 int(path.split('/')[-2].split('_')[-1]) == seg_number]
+            ensembled_pred = int(sum(one_segment_preds) >= len(one_segment_preds) / 2)
+            ensembled_pred_list.append(ensembled_pred)
+        orig_mat_list['preictal'] = ensembled_pred_list
+        return orig_mat_list
+
+    # preds to csv
+    sub_df = pd.read_csv('../output/sampleSubmission.csv')
+    pred_df = ensemble_preds(pred_list, path_list, sub_df)
+    sub_df.loc[pred_df.index, 'preictal'] = pred_df['preictal']
+    pd.DataFrame(pred_list)
