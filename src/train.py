@@ -29,6 +29,7 @@ from torchvision import models, transforms, utils
 
 from eeglibrary import EEG, EEGDataSet, EEGDataLoader, make_weights_for_balanced_classes
 from eeglibrary.models.CNN import *
+from eeglibrary.models.RNN import *
 from args import train_args
 from utils import AverageMeter
 
@@ -53,11 +54,16 @@ def init_seed(args):
     random.seed(args.seed)
 
 
-def set_model(args):
+def set_model(args, eeg_conf):
     if args.model_name == 'cnn_1_16_399':
         model = cnn_1_16_399(n_labels=len(class_names))
     if args.model_name == 'cnn_16_751_751':
         model = cnn_16_751_751(n_labels=len(class_names))
+    if args.model_name == 'rnn_16_751_751':
+        cnn, out_ftrs = cnn_ftrs_16_751_751(n_labels=len(class_names))
+        model = RNN(cnn, out_ftrs, args.rnn_type, class_names, eeg_conf=eeg_conf)
+    else:
+        raise NotImplementedError
 
     print(model)
 
@@ -117,9 +123,9 @@ if __name__ == '__main__':
     best_loss = 100000.0
     avg_loss, avg_auc, start_epoch, start_iter, optim_state = 0, 0, 0, 0, None
 
-    model = set_model(args)
-    model = model.to(device)
     eeg_conf = set_eeg_conf(args)
+    model = set_model(args, eeg_conf)
+    model = model.to(device)
     dataloaders = set_dataloaders(args, eeg_conf)
 
     parameters = model.parameters()
