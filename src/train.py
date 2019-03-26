@@ -80,6 +80,7 @@ def set_dataloaders(args, eeg_conf):
         if part in ['train', 'val']:
             dataset = EEGDataSet(manifest, eeg_conf, class_names)
             weights = make_weights_for_balanced_classes(dataset.labels_index(), len(class_names))
+            # sampler = WeightedRandomSampler(weights, len(dataset))
             sampler = WeightedRandomSampler(weights, 100)
             dataloaders[part] = EEGDataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers,
                                               pin_memory=True, sampler=sampler)
@@ -121,6 +122,8 @@ if __name__ == '__main__':
         start_epoch_time = time.time()
 
         for phase in ['train', 'val']:
+            print('\n{} phase started.'.format(phase))
+
             epoch_preds = []
             epoch_labels = []
             for i, (inputs, labels) in enumerate(dataloaders[phase]):
@@ -156,10 +159,8 @@ if __name__ == '__main__':
                 batch_time.update(time.time() - end)
                 end = time.time()
                 if not args.silent:
-                    if phase == 'val':
-                        print('\nvalidation results')
                     print('Epoch: [{0}][{1}/{2}] \tTime {batch_time.val:.3f} ({batch_time.avg:.3f}) \t'
-                          'rec_0 {rec_0.val:.3f} rec_1 {rec_1.val:.3f}) \tLoss {loss.val:.4f} ({loss.avg:.4f}) \t'.format(
+                          'rec_0 {rec_0.val:.3f} rec_1 {rec_1.val:.3f} \tLoss {loss.val:.4f} ({loss.avg:.4f}) \t'.format(
                             epoch, (i + 1), len(dataloaders[phase]), batch_time=batch_time,
                             rec_0=recall_0[phase], rec_1=recall_1[phase], loss=losses[phase]))
 
@@ -205,7 +206,7 @@ if __name__ == '__main__':
         path_list.extend(paths)
         # break
 
-    def ensemble_preds(pred_list, path_list, sub_df):
+    def ensemble_preds(pred_list, path_list, sub_df, thresh):
         # もともとのmatファイルごとに振り分け直す
         patient_name = path_list[0].split('/')[-3]
         orig_mat_list = sub_df[sub_df['clip'].apply(lambda x: '_'.join(x.split('_')[:2])) == patient_name]
@@ -215,7 +216,7 @@ if __name__ == '__main__':
             seg_number = int(orig_mat_name[-8:-4])
             one_segment_preds = [pred for path, pred in zip(path_list, pred_list) if
                                  int(path.split('/')[-2].split('_')[-1]) == seg_number]
-            ensembled_pred = int(sum(one_segment_preds) >= len(one_segment_preds) / 2)
+            ensembled_pred = int(sum(one_segment_preds) >= len(one_segment_preds) * thresh)
             ensembled_pred_list.append(ensembled_pred)
         orig_mat_list['preictal'] = ensembled_pred_list
         return orig_mat_list
@@ -223,6 +224,7 @@ if __name__ == '__main__':
     # preds to csv
     # sub_df = pd.read_csv('../output/sampleSubmission.csv')
     sub_df = pd.read_csv(args.sub_path)
-    pred_df = ensemble_preds(pred_list, path_list, sub_df)
+    thresh = 0.3    # 1の割合がthreshを超えたら1と判断
+    pred_df = ensemble_preds(pred_list, path_list, sub_df, thresh)
     sub_df.loc[pred_df.index, 'preictal'] = pred_df['preictal']
-    sub_df.to_csv(args.sub_path)
+    sub_df.to_csv(args.sub_path, index=False)
