@@ -80,9 +80,9 @@ def set_dataloaders(args, eeg_conf):
         if part in ['train', 'val']:
             dataset = EEGDataSet(manifest, eeg_conf, class_names)
             weights = make_weights_for_balanced_classes(dataset.labels_index(), len(class_names))
-            sampler = WeightedRandomSampler(weights, len(dataset))
+            sampler = WeightedRandomSampler(weights, 100)
             dataloaders[part] = EEGDataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers,
-                                              pin_memory=True, shuffle=False, sampler=sampler)
+                                              pin_memory=True, sampler=sampler)
         else:
             dataset = EEGDataSet(manifest, eeg_conf, return_path=True)
             dataloaders[part] = EEGDataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers,
@@ -97,7 +97,7 @@ if __name__ == '__main__':
 
     device = torch.device("cuda" if args.cuda else "cpu")
 
-    Path(args.model_dir).mkdir(exist_ok=True)
+    Path(args.model_path).parent.mkdir(exist_ok=True)
 
     start_epoch, start_iter, optim_state = 0, 0, None
     best_loss, best_auc, losses, aucs, recall_0, recall_1 = {}, {}, {}, {}, {}, {}
@@ -123,7 +123,7 @@ if __name__ == '__main__':
         for phase in ['train', 'val']:
             epoch_preds = []
             epoch_labels = []
-            for i, (inputs, labels) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
+            for i, (inputs, labels) in enumerate(dataloaders[phase]):
                 start_time = time.time()
                 inputs = inputs.to(device)
                 labels = labels.to(device)
@@ -133,8 +133,8 @@ if __name__ == '__main__':
                 with torch.set_grad_enabled(phase == 'train'):
                     outputs = model(inputs)
                     _, preds = torch.max(outputs, 1)
-                    epoch_preds.extend(preds.cpu())
-                    epoch_labels.extend(labels.cpu())
+                    epoch_preds.extend(preds.cpu().numpy())
+                    epoch_labels.extend(labels.cpu().numpy())
                     pred_prob = outputs[:, 1].float()
                     loss = criterion(pred_prob, labels.float())
 
