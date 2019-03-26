@@ -48,12 +48,12 @@ def init_seed(args):
 def set_model(args, eeg_conf):
     if args.model_name == 'cnn_1_16_399':
         model = cnn_1_16_399(n_labels=len(class_names))
-    if args.model_name == 'cnn_16_751_751':
+    elif args.model_name == 'cnn_16_751_751':
         model = cnn_16_751_751(n_labels=len(class_names))
-    if args.model_name == 'rnn_16_751_751':
+    elif args.model_name == 'rnn_16_751_751':
         cnn, out_ftrs = cnn_ftrs_16_751_751(n_labels=len(class_names))
         model = RNN(cnn, out_ftrs, args.batch_size, args.rnn_type, class_names, eeg_conf=eeg_conf)
-    if args.model_name == 'cnn_1_16_751_751':
+    elif args.model_name == 'cnn_1_16_751_751':
         model = cnn_1_16_751_751(n_labels=len(class_names))
     else:
         raise NotImplementedError
@@ -163,7 +163,7 @@ if __name__ == '__main__':
                             epoch, (i + 1), len(dataloaders[phase]), batch_time=batch_time,
                             rec_0=recall_0[phase], rec_1=recall_1[phase], loss=losses[phase]))
 
-                print('logging and showing result time {}'.format(time.time() - start_time))
+                # print('logging and showing result time {}'.format(time.time() - start_time))
                 start_time = time.time()
 
             aucs[phase].update(metrics.roc_auc_score(epoch_labels, epoch_preds))
@@ -203,7 +203,7 @@ if __name__ == '__main__':
         _, preds = torch.max(outputs, 1)
         pred_list.extend(preds)
         path_list.extend(paths)
-        break
+        # break
 
     def ensemble_preds(pred_list, path_list, sub_df):
         # もともとのmatファイルごとに振り分け直す
