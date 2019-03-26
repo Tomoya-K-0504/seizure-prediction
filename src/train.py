@@ -1,5 +1,6 @@
 from __future__ import print_function, division
 
+import time
 from pathlib import Path
 
 import numpy as np
@@ -11,6 +12,7 @@ seed = 0
 np.random.seed(seed)
 torch.manual_seed(seed)
 torch.cuda.manual_seed_all(seed)
+import sklearn.metrics as metrics
 import random
 random.seed(seed)
 from torch.utils.data.sampler import WeightedRandomSampler
@@ -78,7 +80,7 @@ def set_dataloaders(args, eeg_conf):
         if part in ['train', 'val']:
             dataset = EEGDataSet(manifest, eeg_conf, class_names)
             weights = make_weights_for_balanced_classes(dataset.labels_index(), len(class_names))
-            sampler = WeightedRandomSampler(weights, args.batch_size)
+            sampler = WeightedRandomSampler(weights, len(dataset))
             dataloaders[part] = EEGDataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers,
                                               pin_memory=True, shuffle=False, sampler=sampler)
         else:
@@ -98,10 +100,10 @@ if __name__ == '__main__':
     Path(args.model_dir).mkdir(exist_ok=True)
 
     start_epoch, start_iter, optim_state = 0, 0, None
-    best_loss, best_auc, losses, aucs = {}, {}, {}, {}
+    best_loss, best_auc, losses, aucs, recall_0, recall_1 = {}, {}, {}, {}, {}, {}
     for phase in ['train', 'val']:
-        best_loss[phase], best_auc[phase], losses[phase], aucs[phase] = 1000, 0, AverageMeter(), AverageMeter()
-
+        best_loss[phase], best_auc[phase] = 1000, 0
+        losses[phase], recall_0[phase], recall_1[phase], aucs[phase] = (AverageMeter() for i in range(4))
     eeg_conf = set_eeg_conf(args)
     model = set_model(args, eeg_conf)
     model = model.to(device)
@@ -115,11 +117,12 @@ if __name__ == '__main__':
     batch_time = AverageMeter()
 
     for epoch in range(start_epoch, args.epochs):
-        break
         end = time.time()
         start_epoch_time = time.time()
 
         for phase in ['train', 'val']:
+            epoch_preds = []
+            epoch_labels = []
             for i, (inputs, labels) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
                 start_time = time.time()
                 inputs = inputs.to(device)
@@ -130,6 +133,8 @@ if __name__ == '__main__':
                 with torch.set_grad_enabled(phase == 'train'):
                     outputs = model(inputs)
                     _, preds = torch.max(outputs, 1)
+                    epoch_preds.extend(preds.cpu())
+                    epoch_labels.extend(labels.cpu())
                     pred_prob = outputs[:, 1].float()
                     loss = criterion(pred_prob, labels.float())
 
@@ -137,39 +142,40 @@ if __name__ == '__main__':
                         loss.backward()
                         optimizer.step()
 
-                print('data to GPU and training and calc loss {}'.format(time.time() - start_time))
+                # print('data to GPU and training and calc loss {}'.format(time.time() - start_time))
                 start_time = time.time()
 
                 losses[phase].update(loss.item() / inputs.size(0), inputs.size(0))
-                aucs[phase].update(
-                    metrics.auc(labels.cpu(), pred_prob.cpu().detach().numpy()) / inputs.size(0),
-                    inputs.size(0)
-                )
-
+                _, recall, _, _ = metrics.precision_recall_fscore_support(labels.cpu(), preds.cpu())
+                if len(recall) == 2:
+                    recall_0[phase].update(recall[0])
+                    recall_1[phase].update(recall[1])
+                else:
+                    recall_0[phase].update(recall[0]) if not labels.sum() else recall_1[phase].update(recall[0])
                 # measure elapsed time
                 batch_time.update(time.time() - end)
                 end = time.time()
                 if not args.silent:
                     if phase == 'val':
-                        print('validation results')
+                        print('\nvalidation results')
                     print('Epoch: [{0}][{1}/{2}] \tTime {batch_time.val:.3f} ({batch_time.avg:.3f}) \t'
-                          'AUC {auc.val:.3f} ({auc.avg:.3f}) \tLoss {loss.val:.4f} ({loss.avg:.4f}) \t'.format(
+                          'rec_0 {rec_0.val:.3f} rec_1 {rec_1.val:.3f}) \tLoss {loss.val:.4f} ({loss.avg:.4f}) \t'.format(
                             epoch, (i + 1), len(dataloaders[phase]), batch_time=batch_time,
-                            auc=aucs[phase], loss=losses[phase]))
+                            rec_0=recall_0[phase], rec_1=recall_1[phase], loss=losses[phase]))
 
                 print('logging and showing result time {}'.format(time.time() - start_time))
                 start_time = time.time()
 
+            aucs[phase].update(metrics.roc_auc_score(epoch_labels, epoch_preds))
+
             if losses[phase].avg < best_loss[phase]:
                 best_loss[phase] = losses[phase].avg
 
-            if aucs[phase].avg < best_auc[phase]:
+            if aucs[phase].avg > best_auc[phase]:
                 best_auc[phase] = aucs[phase].avg
                 if phase == 'val':
                     print("Found better validated model, saving to %s" % args.model_path)
-                    torch.save(
-                        RNN.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results)
-                        , args.model_path)
+                    torch.save(model.state_dict(), args.model_path)
 
                     # if not args.no_shuffle:
                     #     print("Shuffling batches...")
@@ -182,7 +188,7 @@ if __name__ == '__main__':
             print('Learning rate annealed to: {lr:.6f}'.format(lr=g['lr']))
 
             losses[phase].reset()
-            aucs[phase].reset()
+            recall_0[phase].reset()
 
             print('epochs end, model saving anneal lr time {}'.format(time.time() - start_time))
 
