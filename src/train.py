@@ -1,33 +1,22 @@
 from __future__ import print_function, division
-import os, sys, pdb, time
+
 from pathlib import Path
-import copy
-import pandas as pd
+
 import numpy as np
-import matplotlib.pyplot as plt
-import scipy.signal
-import pickle
-from tqdm import tqdm
+import pandas as pd
 import torch
-from torch import nn
-import torchvision
+from tqdm import tqdm
+
 seed = 0
 np.random.seed(seed)
 torch.manual_seed(seed)
 torch.cuda.manual_seed_all(seed)
-from sklearn import metrics
-from random import shuffle
 import random
 random.seed(seed)
-from torch.utils.data import DataLoader
-from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import WeightedRandomSampler
-import torch.nn as nn
 import torch.optim as optim
-from torch.optim import lr_scheduler
-from torchvision import models, transforms, utils
 
-from eeglibrary import EEG, EEGDataSet, EEGDataLoader, make_weights_for_balanced_classes
+from eeglibrary import EEGDataSet, EEGDataLoader, make_weights_for_balanced_classes
 from eeglibrary.models.CNN import *
 from eeglibrary.models.RNN import *
 from args import train_args
@@ -62,6 +51,8 @@ def set_model(args, eeg_conf):
     if args.model_name == 'rnn_16_751_751':
         cnn, out_ftrs = cnn_ftrs_16_751_751(n_labels=len(class_names))
         model = RNN(cnn, out_ftrs, args.batch_size, args.rnn_type, class_names, eeg_conf=eeg_conf)
+    if args.model_name == 'cnn_1_16_751_751':
+        model = cnn_1_16_751_751(n_labels=len(class_names))
     else:
         raise NotImplementedError
 
@@ -130,6 +121,7 @@ if __name__ == '__main__':
 
         for phase in ['train', 'val']:
             for i, (inputs, labels) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
+                start_time = time.time()
                 inputs = inputs.to(device)
                 labels = labels.to(device)
 
@@ -144,6 +136,9 @@ if __name__ == '__main__':
                     if phase == 'train':
                         loss.backward()
                         optimizer.step()
+
+                print('data to GPU and training and calc loss {}'.format(time.time() - start_time))
+                start_time = time.time()
 
                 losses[phase].update(loss.item() / inputs.size(0), inputs.size(0))
                 aucs[phase].update(
@@ -162,6 +157,9 @@ if __name__ == '__main__':
                             epoch, (i + 1), len(dataloaders[phase]), batch_time=batch_time,
                             auc=aucs[phase], loss=losses[phase]))
 
+                print('logging and showing result time {}'.format(time.time() - start_time))
+                start_time = time.time()
+
             if losses[phase].avg < best_loss[phase]:
                 best_loss[phase] = losses[phase].avg
 
@@ -170,8 +168,7 @@ if __name__ == '__main__':
                 if phase == 'val':
                     print("Found better validated model, saving to %s" % args.model_path)
                     torch.save(
-                        RNN.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
-                                             wer_results=wer_results, cer_results=cer_results)
+                        RNN.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results)
                         , args.model_path)
 
                     # if not args.no_shuffle:
@@ -187,7 +184,10 @@ if __name__ == '__main__':
             losses[phase].reset()
             aucs[phase].reset()
 
+            print('epochs end, model saving anneal lr time {}'.format(time.time() - start_time))
+
     # test phase
+    model.eval()
     pred_list = []
     path_list = []
     for i, (inputs, paths) in tqdm(enumerate(dataloaders['test']), total=len(dataloaders['test'])):
@@ -215,7 +215,8 @@ if __name__ == '__main__':
         return orig_mat_list
 
     # preds to csv
-    sub_df = pd.read_csv('../output/sampleSubmission.csv')
+    # sub_df = pd.read_csv('../output/sampleSubmission.csv')
+    sub_df = pd.read_csv(args.sub_path)
     pred_df = ensemble_preds(pred_list, path_list, sub_df)
     sub_df.loc[pred_df.index, 'preictal'] = pred_df['preictal']
-    pd.DataFrame(pred_list)
+    sub_df.to_csv(args.sub_path)

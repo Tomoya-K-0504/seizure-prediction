@@ -86,16 +86,13 @@ def remove_mac_folder(path):
 
 def compile_manifests(args):
     patient_folders = [p for p in Path(args.out_dir).iterdir() if p.name[0] in ['D', 'P']]
-    manifest_paths = {part: [] for part in partial_name_list}
     Path('{}/manifests'.format(args.out_dir)).mkdir(exist_ok=True)
 
     for part in partial_name_list:
         df = pd.DataFrame()
-        _ = patient_folders[0] / '{}_manifest.csv'.format(part)
         part_manifest_paths = [p / '{}_manifest.csv'.format(part) for p in patient_folders]
         for part_manifest_path in part_manifest_paths:
             df = df.append(pd.read_csv(part_manifest_path, header=None))
-            # part_manifest_path.unlink()
         df.to_csv('{}/manifests/{}_manifest.csv'.format(args.out_dir, part), header=None, index=False)
 
 
