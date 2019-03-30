@@ -19,6 +19,7 @@ from torch.utils.data.sampler import WeightedRandomSampler
 import torch.optim as optim
 
 from eeglibrary import EEGDataSet, EEGDataLoader, make_weights_for_balanced_classes
+from eeglibrary import TensorBoardLogger
 from eeglibrary.models.CNN import *
 from eeglibrary.models.RNN import *
 from args import train_args
@@ -102,6 +103,10 @@ if __name__ == '__main__':
 
     Path(args.model_path).parent.mkdir(exist_ok=True)
 
+    if args.tensorboard:
+        _ = str(Path(args.log_dir).resolve())
+        tensorboard_logger = TensorBoardLogger(args.id, str(Path(args.log_dir).resolve()), args.log_params)
+
     start_epoch, start_iter, optim_state = 0, 0, None
     best_loss, best_auc, losses, aucs, recall_0, recall_1 = {}, {}, {}, {}, {}, {}
     for phase in ['train', 'val']:
@@ -184,6 +189,17 @@ if __name__ == '__main__':
                     #     print("Shuffling batches...")
                     #     train_sampler.shuffle(epoch)
 
+            if args.tensorboard:
+                if args.log_params:
+                    raise NotImplementedError
+                values = {
+                    'loss': losses[phase].avg,
+                    'rec_0': recall_0[phase].avg,
+                    'rec_1': recall_1[phase].avg,
+                    'auc': aucs[phase].avg,
+                }
+                tensorboard_logger.update(epoch, values, model.named_parameters())
+
             # anneal lr
             param_groups = optimizer.param_groups
             for g in param_groups:
@@ -217,8 +233,6 @@ if __name__ == '__main__':
             seg_number = int(orig_mat_name[-8:-4])
             one_segment_preds = [pred for path, pred in zip(path_list, pred_list) if
                                  int(path.split('/')[-2].split('_')[-1]) == seg_number]
-            _ = sum(one_segment_preds)
-            __ = len(one_segment_preds) * thresh
             ensembled_pred = int(sum(one_segment_preds) >= len(one_segment_preds) * thresh)
             ensembled_pred_list.append(ensembled_pred)
         orig_mat_list['preictal'] = ensembled_pred_list

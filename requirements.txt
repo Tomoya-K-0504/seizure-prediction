@@ -7,3 +7,4 @@ torchvision
 glibc
 tqdm
 librosa
+tensorboardX
