@@ -48,6 +48,8 @@ def init_seed(args):
 def set_model(args, eeg_conf):
     if args.model_name == 'cnn_1_16_399':
         model = cnn_1_16_399(n_labels=len(class_names))
+    if args.model_name == 'cnn_1_24_399':
+        model = cnn_1_24_399(n_labels=len(class_names))
     elif args.model_name == 'cnn_16_751_751':
         model = cnn_16_751_751(n_labels=len(class_names))
     elif args.model_name == 'rnn_16_751_751':
