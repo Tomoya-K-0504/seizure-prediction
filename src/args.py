@@ -18,6 +18,7 @@ def train_args():
     parser.add_argument('--model-name', default='cnn_16_751_751', type=str, help='network model name')
     parser.add_argument('--sub-path', default='../output/', type=str, help='submission file save folder name')
     parser.add_argument('--seed', default=0, type=int, help='Seed to generators')
+    parser.add_argument('--thresh', default=0.5, type=float, help='Threshold in ensemble')
     parser.add_argument('--model-path', metavar='DIR', help='directory to save models', default='../model/')
     parser.add_argument('--train-manifest', type=str, help='manifest file for training', default='input/train_manifest.csv')
     parser.add_argument('--val-manifest', type=str, help='manifest file for validation', default='input/val_manifest.csv')
