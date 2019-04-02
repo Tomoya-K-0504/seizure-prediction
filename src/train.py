@@ -48,16 +48,16 @@ def init_seed(args):
 
 def set_model(args, eeg_conf):
     if args.model_name == 'cnn_1_16_399':
-        model = cnn_1_16_399(n_labels=len(class_names))
+        model = cnn_1_16_399(eeg_conf, n_labels=len(class_names))
     elif args.model_name == 'cnn_1_24_399':
-        model = cnn_1_24_399(n_labels=len(class_names))
+        model = cnn_1_24_399(eeg_conf, n_labels=len(class_names))
     elif args.model_name == 'cnn_16_751_751':
-        model = cnn_16_751_751(n_labels=len(class_names))
+        model = cnn_16_751_751(eeg_conf, n_labels=len(class_names))
     elif args.model_name == 'rnn_16_751_751':
-        cnn, out_ftrs = cnn_ftrs_16_751_751(n_labels=len(class_names))
+        cnn, out_ftrs = cnn_ftrs_16_751_751(eeg_conf, n_labels=len(class_names))
         model = RNN(cnn, out_ftrs, args.batch_size, args.rnn_type, class_names, eeg_conf=eeg_conf)
     elif args.model_name == 'cnn_1_16_751_751':
-        model = cnn_1_16_751_751(n_labels=len(class_names))
+        model = cnn_1_16_751_751(eeg_conf, n_labels=len(class_names))
     else:
         raise NotImplementedError
 
@@ -83,8 +83,7 @@ def set_dataloaders(args, eeg_conf):
         if part in ['train', 'val']:
             dataset = EEGDataSet(manifest, eeg_conf, class_names)
             weights = make_weights_for_balanced_classes(dataset.labels_index(), len(class_names))
-            # sampler = WeightedRandomSampler(weights, len(dataset))
-            sampler = WeightedRandomSampler(weights, 100)
+            sampler = WeightedRandomSampler(weights, len(dataset)//args.iter_size)
             dataloaders[part] = EEGDataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers,
                                               pin_memory=True, sampler=sampler)
         else:
@@ -104,8 +103,7 @@ if __name__ == '__main__':
     Path(args.model_path).parent.mkdir(exist_ok=True)
 
     if args.tensorboard:
-        _ = str(Path(args.log_dir).resolve())
-        tensorboard_logger = TensorBoardLogger(args.id, str(Path(args.log_dir).resolve()), args.log_params)
+        tensorboard_logger = TensorBoardLogger(args.id, args.log_dir, args.log_params)
 
     start_epoch, start_iter, optim_state = 0, 0, None
     best_loss, best_auc, losses, aucs, recall_0, recall_1 = {}, {}, {}, {}, {}, {}
@@ -125,7 +123,6 @@ if __name__ == '__main__':
     batch_time = AverageMeter()
 
     for epoch in range(start_epoch, args.epochs):
-        end = time.time()
         start_epoch_time = time.time()
 
         for phase in ['train', 'val']:
@@ -133,8 +130,11 @@ if __name__ == '__main__':
 
             epoch_preds = []
             epoch_labels = []
+
+            start_time = time.time()
             for i, (inputs, labels) in enumerate(dataloaders[phase]):
-                start_time = time.time()
+                data_load_time = time.time() - start_time
+                # print('data loading time', data_load_time)
                 inputs = inputs.to(device)
                 labels = labels.to(device)
 
@@ -142,6 +142,7 @@ if __name__ == '__main__':
 
                 with torch.set_grad_enabled(phase == 'train'):
                     outputs = model(inputs)
+                    # print('forward calculation time', time.time() - (data_load_time + start_time))
                     _, preds = torch.max(outputs, 1)
                     epoch_preds.extend(preds.cpu().numpy())
                     epoch_labels.extend(labels.cpu().numpy())
@@ -152,9 +153,7 @@ if __name__ == '__main__':
                         loss.backward()
                         optimizer.step()
 
-                # print('data to GPU and training and calc loss {}'.format(time.time() - start_time))
-                start_time = time.time()
-
+                # save loss and recall in one batch
                 losses[phase].update(loss.item() / inputs.size(0), inputs.size(0))
                 _, recall, _, _ = metrics.precision_recall_fscore_support(labels.cpu(), preds.cpu())
                 if len(recall) == 2:
@@ -162,16 +161,16 @@ if __name__ == '__main__':
                     recall_1[phase].update(recall[1])
                 else:
                     recall_0[phase].update(recall[0]) if not labels.sum() else recall_1[phase].update(recall[0])
+
                 # measure elapsed time
-                batch_time.update(time.time() - end)
-                end = time.time()
+                batch_time.update(time.time() - start_time)
+
                 if not args.silent:
                     print('Epoch: [{0}][{1}/{2}] \tTime {batch_time.val:.3f} ({batch_time.avg:.3f}) \t'
                           'rec_0 {rec_0.val:.3f} rec_1 {rec_1.val:.3f} \tLoss {loss.val:.4f} ({loss.avg:.4f}) \t'.format(
-                            epoch, (i + 1), len(dataloaders[phase]), batch_time=batch_time,
-                            rec_0=recall_0[phase], rec_1=recall_1[phase], loss=losses[phase]))
+                        epoch, (i + 1), len(dataloaders[phase]), batch_time=batch_time,
+                        rec_0=recall_0[phase], rec_1=recall_1[phase], loss=losses[phase]))
 
-                # print('logging and showing result time {}'.format(time.time() - start_time))
                 start_time = time.time()
 
             aucs[phase].update(metrics.roc_auc_score(epoch_labels, epoch_preds))
@@ -184,10 +183,6 @@ if __name__ == '__main__':
                 if phase == 'val':
                     print("Found better validated model, saving to %s" % args.model_path)
                     torch.save(model.state_dict(), args.model_path)
-
-                    # if not args.no_shuffle:
-                    #     print("Shuffling batches...")
-                    #     train_sampler.shuffle(epoch)
 
             if args.tensorboard:
                 if args.log_params:
@@ -208,8 +203,6 @@ if __name__ == '__main__':
 
             losses[phase].reset()
             recall_0[phase].reset()
-
-            print('epochs end, model saving anneal lr time {}'.format(time.time() - start_time))
 
     # test phase
     model.eval()
