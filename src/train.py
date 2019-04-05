@@ -100,8 +100,8 @@ if __name__ == '__main__':
     init_seed(args)
 
     device = torch.device("cuda" if args.cuda else "cpu")
-    # if device == 'cuda':
-    #     torch.cuda.set_device(args.gpu_id)
+    if device == 'cuda':
+        torch.cuda.set_device(args.gpu_id)
 
     Path(args.model_path).parent.mkdir(exist_ok=True)
 
