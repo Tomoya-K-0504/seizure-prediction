@@ -87,3 +87,4 @@ if __name__ == '__main__':
         id_name = '_'.join(list(map(str, params_dict.values())))
         exec_str += ' --id {}'.format(id_name)
         _ = subprocess.check_output(exec_str, shell=True)
+        print(_)
