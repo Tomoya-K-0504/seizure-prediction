@@ -2,6 +2,7 @@ import argparse
 import subprocess
 import copy
 from tqdm import tqdm
+from pathlib import Path
 
 
 def preprocess_args():
@@ -80,7 +81,7 @@ if __name__ == '__main__':
     for arg, value in args_dict.items():
         if isinstance(value, list):
             grid_params = make_params_gridlike(grid_params, arg, value)
-    base_exec_str = 'python /home/tomoya/workspace/kaggle/seizure-prediction/src/train.py --tensorboard --cuda '
+    base_exec_str = '{}/train.py --tensorboard --cuda '.format(Path(__file__).parent.resolve())
     base_exec_str += ' '.join(['--{} {}'.format(one_arg.replace('_', '-'), args_dict[one_arg]) for one_arg in one_args])
     for params_dict in tqdm(grid_params):
         exec_str = base_exec_str + ' ' + ' '.join(['--{} {}'.format(arg.replace('_', '-'), value) for arg, value in params_dict.items()])
