@@ -58,6 +58,7 @@ def train_args():
                         help='Log parameter values and gradients')
     parser.add_argument('--id', default='Seizure prediction training', help='Identifier for tensorboard run')
     parser.add_argument('--gpu-id', default=0, type=int, help='ID of GPU to use')
+    parser.add_argument('--test', dest='test', action='store_true', help='Test phase after training or not')
 
     # parser.add_argument('--visdom', dest='visdom', action='store_true', help='Turn on visdom graphing')
     # parser.add_argument('--continue-from', default='', help='Continue from checkpoint model')
