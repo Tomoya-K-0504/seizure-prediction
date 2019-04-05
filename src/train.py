@@ -18,7 +18,7 @@ random.seed(seed)
 from torch.utils.data.sampler import WeightedRandomSampler
 import torch.optim as optim
 
-from eeglibrary import EEGDataSet, EEGDataLoader, make_weights_for_balanced_classes
+from eeglibrary import EEGDataSet, EEGDataLoader, make_weights_for_balanced_classes, EEG
 from eeglibrary import TensorBoardLogger
 from eeglibrary.models.CNN import *
 from eeglibrary.models.RNN import *
@@ -49,12 +49,10 @@ def init_seed(args):
 def set_model(args, eeg_conf):
     if args.model_name == 'cnn_1_16_399':
         model = cnn_1_16_399(eeg_conf, n_labels=len(class_names))
-    elif args.model_name == 'cnn_1_24_399':
-        model = cnn_1_24_399(eeg_conf, n_labels=len(class_names))
     elif args.model_name == 'cnn_16_751_751':
         model = cnn_16_751_751(eeg_conf, n_labels=len(class_names))
     elif args.model_name == 'rnn_16_751_751':
-        cnn, out_ftrs = cnn_ftrs_16_751_751(eeg_conf, n_labels=len(class_names))
+        cnn, out_ftrs = cnn_ftrs_16_751_751(eeg_conf)
         model = RNN(cnn, out_ftrs, args.batch_size, args.rnn_type, class_names, eeg_conf=eeg_conf)
     elif args.model_name == 'cnn_1_16_751_751':
         model = cnn_1_16_751_751(eeg_conf, n_labels=len(class_names))
@@ -67,7 +65,10 @@ def set_model(args, eeg_conf):
 
 
 def set_eeg_conf(args):
+    one_eeg_path = pd.read_csv(args.train_manifest).values[0][0]
+    n_elect = len(EEG.load_pkl(one_eeg_path).channel_list)
     eeg_conf = dict(spect=args.spect,
+                    n_elect=n_elect,
                     window_size=args.window_size,
                     window_stride=args.window_stride,
                     window='hamming',
@@ -83,7 +84,7 @@ def set_dataloaders(args, eeg_conf):
         if part in ['train', 'val']:
             dataset = EEGDataSet(manifest, eeg_conf, class_names)
             weights = make_weights_for_balanced_classes(dataset.labels_index(), len(class_names))
-            sampler = WeightedRandomSampler(weights, len(dataset)//args.iter_size)
+            sampler = WeightedRandomSampler(weights, int(len(dataset)*args.epoch_rate))
             dataloaders[part] = EEGDataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers,
                                               pin_memory=True, sampler=sampler)
         else:
@@ -99,6 +100,8 @@ if __name__ == '__main__':
     init_seed(args)
 
     device = torch.device("cuda" if args.cuda else "cpu")
+    if device == 'cuda':
+        torch.cuda.set_device(args.gpu_id)
 
     Path(args.model_path).parent.mkdir(exist_ok=True)
 
@@ -233,7 +236,7 @@ if __name__ == '__main__':
 
     # preds to csv
     # sub_df = pd.read_csv('../output/sampleSubmission.csv')
-    sub_df = pd.read_csv(args.sub_path)
+    sub_df = pd.read_csv(args.sub_path, engine='python')
     thresh = args.thresh    # 1の割合がthreshを超えたら1と判断
     pred_df = ensemble_preds(pred_list, path_list, sub_df, thresh)
     sub_df.loc[pred_df.index, 'preictal'] = pred_df['preictal']

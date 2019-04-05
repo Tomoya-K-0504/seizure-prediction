@@ -24,7 +24,7 @@ def train_args():
     parser.add_argument('--val-manifest', type=str, help='manifest file for validation', default='input/val_manifest.csv')
     parser.add_argument('--test-manifest', type=str, help='manifest file for test', default='input/test_manifest.csv')
     parser.add_argument('--batch-size', default=32, type=int, help='Batch size for training')
-    parser.add_argument('--iter-size', default=10, type=int, help='Iteration size in one epoch')
+    parser.add_argument('--epoch-rate', default=1.0, type=float, help='Data rate to to use in one epoch')
     parser.add_argument('--num-workers', default=4, type=int, help='Number of workers used in data-loading')
     parser.add_argument('--labels-path', default='', help='Contains all classes for prediction')
     parser.add_argument('--window-size', default=1.0, type=float, help='Window size for spectrogram in seconds')
@@ -35,7 +35,7 @@ def train_args():
     parser.add_argument('--rnn-type', default='gru', help='Type of the RNN. rnn|gru|lstm are supported')
     parser.add_argument('--epochs', default=70, type=int, help='Number of training epochs')
     parser.add_argument('--cuda', dest='cuda', action='store_true', help='Use cuda to train model')
-    parser.add_argument('--lr', '--learning-rate', default=3e-4, type=float, help='initial learning rate')
+    parser.add_argument('--lr', '--learning-rate', default=3e-2, type=float, help='initial learning rate')
     parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
     parser.add_argument('--max-norm', default=400, type=int, help='Norm cutoff to prevent explosion of gradients')
     parser.add_argument('--learning-anneal', default=1.1, type=float,
@@ -49,8 +49,6 @@ def train_args():
                         help='Use random tempo and gain perturbations.')
     parser.add_argument('--no-bidirectional', dest='bidirectional', action='store_false', default=True,
                         help='Turn off bi-directional RNNs, introduces lookahead convolution')
-    parser.add_argument('--kernel-size', type=str, help='kernel size in the first layer of cnn', default='1,100')
-    parser.add_argument('--padding-size', type=str, help='padding size in the first layer of cnn', default='0,1')
     parser.add_argument('--spect', dest='spect', action='store_true', help='Use spectrogram as input')
     parser.add_argument('--sample-rate', default=1500, type=int, help='Sample rate')
 
@@ -59,6 +57,7 @@ def train_args():
     parser.add_argument('--log-params', dest='log_params', action='store_true',
                         help='Log parameter values and gradients')
     parser.add_argument('--id', default='Seizure prediction training', help='Identifier for tensorboard run')
+    parser.add_argument('--gpu-id', default=0, type=int, help='ID of GPU to use')
 
     # parser.add_argument('--visdom', dest='visdom', action='store_true', help='Turn on visdom graphing')
     # parser.add_argument('--continue-from', default='', help='Continue from checkpoint model')
