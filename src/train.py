@@ -84,9 +84,9 @@ def set_dataloaders(args, eeg_conf):
         if part in ['train', 'val']:
             dataset = EEGDataSet(manifest, eeg_conf, class_names)
             weights = make_weights_for_balanced_classes(dataset.labels_index(), len(class_names))
-            sampler = WeightedRandomSampler(weights, int(len(dataset)*args.epoch_rate))
+            sampler = WeightedRandomSampler(weights, int(len(dataset) * args.epoch_rate))
             dataloaders[part] = EEGDataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers,
-                                              pin_memory=True, sampler=sampler)
+                                              pin_memory=True, sampler=sampler, drop_last=True)
         else:
             dataset = EEGDataSet(manifest, eeg_conf, return_path=True)
             dataloaders[part] = EEGDataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers,
@@ -191,10 +191,10 @@ if __name__ == '__main__':
                 if args.log_params:
                     raise NotImplementedError
                 values = {
-                    phase + 'loss': losses[phase].avg,
-                    phase + 'rec_0': recall_0[phase].avg,
-                    phase + 'rec_1': recall_1[phase].avg,
-                    phase + 'auc': aucs[phase].avg,
+                    phase + '_loss': losses[phase].avg,
+                    phase + '_rec_0': recall_0[phase].avg,
+                    phase + '_rec_1': recall_1[phase].avg,
+                    phase + '_auc': aucs[phase].avg,
                 }
                 tensorboard_logger.update(epoch, values, model.named_parameters())
 

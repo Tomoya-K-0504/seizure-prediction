@@ -34,12 +34,14 @@ def search_args():
     parser.add_argument('--window-size', default='1.0', type=str, help='Window size for spectrogram in seconds')
     parser.add_argument('--window-stride', default='0.05', type=str, help='Window stride for spectrogram in seconds')
     parser.add_argument('--window', default='hamming', help='Window type for spectrogram generation')
-    # parser.add_argument('--rnn-type', default='gru', help='Type of the RNN. rnn|gru|lstm are supported')
+    parser.add_argument('--rnn-type', default='gru', help='Type of the RNN. rnn|gru|lstm are supported')
     parser.add_argument('--lr', '--learning-rate', default='3e-2', type=str, help='initial learning rate')
     parser.add_argument('--momentum', default='0.9', type=str, help='momentum')
     parser.add_argument('--learning-anneal', default='1.1', type=str,
                         help='Annealing applied to learning rate every epoch')
     parser.add_argument('--sample-rate', default='1500', type=str, help='Sample rate')
+    parser.add_argument('--hidden-layers', default='2', type=str, help='Number of RNN layers')
+    parser.add_argument('--hidden-size', default='400', type=str, help='Hidden size of RNNs')
 
     return parser.parse_args()
 
@@ -49,7 +51,7 @@ if __name__ == '__main__':
 
     one_args = ['sub_path', 'model_path', 'train_manifest', 'val_manifest', 'test_manifest', 'log_dir', 'epochs', 'gpu_id']
     str_args = ['model_name', 'window', 'rnn_type']
-    int_args = ['batch_size', 'sample_rate']
+    int_args = ['batch_size', 'sample_rate', 'hidden_layers', 'hidden_size']
 
     args = search_args()
     args_dict = {}

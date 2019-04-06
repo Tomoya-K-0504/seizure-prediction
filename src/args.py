@@ -74,7 +74,5 @@ def train_args():
     #                     help='Maximum noise levels to sample from. Maximum 1.0', type=float)
     # parser.add_argument('--no-shuffle', dest='no_shuffle', action='store_true',
     #                     help='Turn off shuffling and sample from dataset based on sequence length (smallest to largest)')
-    # parser.add_argument('--no-sortaGrad', dest='no_sorta_grad', action='store_true',
-    #                     help='Turn off ordering of dataset on sequence length for the first epoch.')
 
     return parser.parse_args()
