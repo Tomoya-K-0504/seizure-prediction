@@ -100,7 +100,7 @@ if __name__ == '__main__':
     init_seed(args)
 
     device = torch.device("cuda" if args.cuda else "cpu")
-    if device == 'cuda':
+    if args.cuda:
         torch.cuda.set_device(args.gpu_id)
 
     Path(args.model_path).parent.mkdir(exist_ok=True)
@@ -191,10 +191,10 @@ if __name__ == '__main__':
                 if args.log_params:
                     raise NotImplementedError
                 values = {
-                    'loss': losses[phase].avg,
-                    'rec_0': recall_0[phase].avg,
-                    'rec_1': recall_1[phase].avg,
-                    'auc': aucs[phase].avg,
+                    phase + 'loss': losses[phase].avg,
+                    phase + 'rec_0': recall_0[phase].avg,
+                    phase + 'rec_1': recall_1[phase].avg,
+                    phase + 'auc': aucs[phase].avg,
                 }
                 tensorboard_logger.update(epoch, values, model.named_parameters())
 
