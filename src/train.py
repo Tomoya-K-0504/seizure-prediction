@@ -12,7 +12,7 @@ seed = 0
 np.random.seed(seed)
 torch.manual_seed(seed)
 torch.cuda.manual_seed_all(seed)
-import sklearn.metrics as metrics
+import sklearn.metrics
 import random
 random.seed(seed)
 from torch.utils.data.sampler import WeightedRandomSampler
@@ -24,6 +24,7 @@ from eeglibrary.models.CNN import *
 from eeglibrary.models.RNN import *
 from args import train_args
 from utils import AverageMeter
+from eeglibrary import torch_roc_auc_score
 
 
 supported_rnns = {
@@ -131,8 +132,8 @@ if __name__ == '__main__':
         for phase in ['train', 'val']:
             print('\n{} phase started.'.format(phase))
 
-            epoch_preds = []
-            epoch_labels = []
+            epoch_preds = torch.empty((len(dataloaders[phase])*args.batch_size, 1), dtype=torch.int64, device=device)
+            epoch_labels = torch.empty((len(dataloaders[phase])*args.batch_size, 1), dtype=torch.int64, device=device)
 
             start_time = time.time()
             for i, (inputs, labels) in enumerate(dataloaders[phase]):
@@ -147,8 +148,8 @@ if __name__ == '__main__':
                     outputs = model(inputs)
                     # print('forward calculation time', time.time() - (data_load_time + start_time))
                     _, preds = torch.max(outputs, 1)
-                    epoch_preds.extend(preds.cpu().numpy())
-                    epoch_labels.extend(labels.cpu().numpy())
+                    epoch_preds[i*args.batch_size:(i+1)*args.batch_size, 0] = preds
+                    epoch_labels[i*args.batch_size:(i+1)*args.batch_size, 0] = labels
                     pred_prob = outputs[:, 1].float()
                     loss = criterion(pred_prob, labels.float())
 
@@ -158,7 +159,7 @@ if __name__ == '__main__':
 
                 # save loss and recall in one batch
                 losses[phase].update(loss.item() / inputs.size(0), inputs.size(0))
-                _, recall, _, _ = metrics.precision_recall_fscore_support(labels.cpu(), preds.cpu())
+                recall = sklearn.metrics.recall_score(labels.cpu(), preds.cpu(), average=None)
                 if len(recall) == 2:
                     recall_0[phase].update(recall[0])
                     recall_1[phase].update(recall[1])
@@ -176,7 +177,7 @@ if __name__ == '__main__':
 
                 start_time = time.time()
 
-            aucs[phase].update(metrics.roc_auc_score(epoch_labels, epoch_preds))
+            aucs[phase].update(sklearn.metrics.roc_auc_score(epoch_labels.cpu().numpy(), epoch_preds.cpu().numpy()))
 
             if losses[phase].avg < best_loss[phase]:
                 best_loss[phase] = losses[phase].avg
@@ -199,10 +200,11 @@ if __name__ == '__main__':
                 tensorboard_logger.update(epoch, values, model.named_parameters())
 
             # anneal lr
-            param_groups = optimizer.param_groups
-            for g in param_groups:
-                g['lr'] = g['lr'] / args.learning_anneal
-            print('Learning rate annealed to: {lr:.6f}'.format(lr=g['lr']))
+            if phase == 'train':
+                param_groups = optimizer.param_groups
+                for g in param_groups:
+                    g['lr'] = g['lr'] / args.learning_anneal
+                print('Learning rate annealed to: {lr:.6f}'.format(lr=g['lr']))
 
             losses[phase].reset()
             recall_0[phase].reset()
