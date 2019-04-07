@@ -159,7 +159,8 @@ if __name__ == '__main__':
 
                 # save loss and recall in one batch
                 losses[phase].update(loss.item() / inputs.size(0), inputs.size(0))
-                recall = sklearn.metrics.recall_score(labels.cpu(), preds.cpu(), average=None)
+                # recall = sklearn.metrics.recall_score(labels.cpu(), preds.cpu(), average=None)
+                recall = torch.Tensor([0, 0]).to(device)
                 if len(recall) == 2:
                     recall_0[phase].update(recall[0])
                     recall_1[phase].update(recall[1])
@@ -171,22 +172,24 @@ if __name__ == '__main__':
 
                 if not args.silent:
                     print('Epoch: [{0}][{1}/{2}] \tTime {batch_time.val:.3f} ({batch_time.avg:.3f}) \t'
-                          'rec_0 {rec_0.val:.3f} rec_1 {rec_1.val:.3f} \tLoss {loss.val:.4f} ({loss.avg:.4f}) \t'.format(
+                          # 'rec_0 {rec_0.val:.3f} rec_1 {rec_1.val:.3f} '
+                          '\tLoss {loss.val:.4f} ({loss.avg:.4f}) \t'.format(
                         epoch, (i + 1), len(dataloaders[phase]), batch_time=batch_time,
-                        rec_0=recall_0[phase], rec_1=recall_1[phase], loss=losses[phase]))
+                        # rec_0=recall_0[phase], rec_1=recall_1[phase],
+                        loss=losses[phase]))
 
                 start_time = time.time()
 
-            aucs[phase].update(sklearn.metrics.roc_auc_score(epoch_labels.cpu().numpy(), epoch_preds.cpu().numpy()))
+            # aucs[phase].update(sklearn.metrics.roc_auc_score(epoch_labels.cpu().numpy(), epoch_preds.cpu().numpy()))
 
             if losses[phase].avg < best_loss[phase]:
                 best_loss[phase] = losses[phase].avg
-
-            if aucs[phase].avg > best_auc[phase]:
-                best_auc[phase] = aucs[phase].avg
                 if phase == 'val':
                     print("Found better validated model, saving to %s" % args.model_path)
                     torch.save(model.state_dict(), args.model_path)
+            #
+            # if aucs[phase].avg > best_auc[phase]:
+            #     best_auc[phase] = aucs[phase].avg
 
             if args.tensorboard:
                 if args.log_params:
@@ -195,7 +198,7 @@ if __name__ == '__main__':
                     phase + '_loss': losses[phase].avg,
                     phase + '_rec_0': recall_0[phase].avg,
                     phase + '_rec_1': recall_1[phase].avg,
-                    phase + '_auc': aucs[phase].avg,
+                    # phase + '_auc': aucs[phase].avg,
                 }
                 tensorboard_logger.update(epoch, values, model.named_parameters())
 
@@ -208,6 +211,7 @@ if __name__ == '__main__':
 
             losses[phase].reset()
             recall_0[phase].reset()
+            recall_1[phase].reset()
 
     if args.test:
         # test phase
