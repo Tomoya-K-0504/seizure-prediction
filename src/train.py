@@ -12,7 +12,7 @@ seed = 0
 np.random.seed(seed)
 torch.manual_seed(seed)
 torch.cuda.manual_seed_all(seed)
-import sklearn.metrics
+# import sklearn.metrics
 import random
 random.seed(seed)
 from torch.utils.data.sampler import WeightedRandomSampler
@@ -32,6 +32,7 @@ supported_rnns = {
     'rnn': nn.RNN,
     'gru': nn.GRU
 }
+
 supported_rnns_inv = dict((v, k) for k, v in supported_rnns.items())
 
 subject_dir_names = ['Dog_1', 'Dog_2', 'Dog_3', 'Dog_4', 'Dog_5', 'Patient_1', 'Patient_2']
@@ -123,7 +124,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.SGD(parameters, lr=args.lr,
                                 momentum=args.momentum, nesterov=True, weight_decay=1e-5)
 
-    criterion = nn.BCELoss()
+    criterion = nn.CrossEntropyLoss(weight=torch.Tensor([1.0, args.pos_loss_weight]).to(device))
     batch_time = AverageMeter()
 
     for epoch in range(start_epoch, args.epochs):
@@ -150,8 +151,7 @@ if __name__ == '__main__':
                     _, preds = torch.max(outputs, 1)
                     epoch_preds[i*args.batch_size:(i+1)*args.batch_size, 0] = preds
                     epoch_labels[i*args.batch_size:(i+1)*args.batch_size, 0] = labels
-                    pred_prob = outputs[:, 1].float()
-                    loss = criterion(pred_prob, labels.float())
+                    loss = criterion(outputs, labels)
 
                     if phase == 'train':
                         loss.backward()

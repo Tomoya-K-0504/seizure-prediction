@@ -33,6 +33,7 @@ def train_args():
     parser.add_argument('--hidden-size', default=800, type=int, help='Hidden size of RNNs')
     parser.add_argument('--hidden-layers', default=5, type=int, help='Number of RNN layers')
     parser.add_argument('--rnn-type', default='gru', help='Type of the RNN. rnn|gru|lstm are supported')
+    parser.add_argument('--pos-loss-weight', default=1.0, type=float, help='The weights of positive class loss')
     parser.add_argument('--epochs', default=70, type=int, help='Number of training epochs')
     parser.add_argument('--cuda', dest='cuda', action='store_true', help='Use cuda to train model')
     parser.add_argument('--lr', '--learning-rate', default=3e-2, type=float, help='initial learning rate')

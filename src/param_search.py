@@ -42,6 +42,7 @@ def search_args():
     parser.add_argument('--sample-rate', default='1500', type=str, help='Sample rate')
     parser.add_argument('--hidden-layers', default='2', type=str, help='Number of RNN layers')
     parser.add_argument('--hidden-size', default='400', type=str, help='Hidden size of RNNs')
+    parser.add_argument('--pos-loss-weight', default='1.0', type=str, help='The weights of positive class loss')
 
     return parser.parse_args()
 
