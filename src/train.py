@@ -71,6 +71,7 @@ def set_eeg_conf(args):
     n_elect = len(EEG.load_pkl(one_eeg_path).channel_list)
     eeg_conf = dict(spect=args.spect,
                     n_elect=n_elect,
+                    duration=args.duration,
                     window_size=args.window_size,
                     window_stride=args.window_stride,
                     window='hamming',
