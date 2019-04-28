@@ -16,7 +16,6 @@ torch.cuda.manual_seed_all(seed)
 import random
 random.seed(seed)
 from torch.utils.data.sampler import WeightedRandomSampler
-import torch.optim as optim
 
 from eeglibrary import EEGDataSet, EEGDataLoader, make_weights_for_balanced_classes, EEG
 from eeglibrary import TensorBoardLogger
@@ -24,7 +23,7 @@ from eeglibrary.models.CNN import *
 from eeglibrary.models.RNN import *
 from args import train_args
 from utils import AverageMeter
-from eeglibrary import torch_roc_auc_score
+from eeglibrary import recall_rate, false_detection_rate
 
 
 supported_rnns = {
@@ -79,13 +78,13 @@ def set_eeg_conf(args):
     return eeg_conf
 
 
-def set_dataloaders(args, eeg_conf):
+def set_dataloaders(args, eeg_conf, device='cpu'):
     manifests = [args.train_manifest, args.val_manifest, args.test_manifest]
 
     dataloaders = {}
     for part, manifest in zip(partial_name_list, manifests):
         if part in ['train', 'val']:
-            dataset = EEGDataSet(manifest, eeg_conf, class_names)
+            dataset = EEGDataSet(manifest, eeg_conf, class_names, device)
             weights = make_weights_for_balanced_classes(dataset.labels_index(), len(class_names))
             sampler = WeightedRandomSampler(weights, int(len(dataset) * args.epoch_rate))
             dataloaders[part] = EEGDataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers,
@@ -112,20 +111,22 @@ if __name__ == '__main__':
         tensorboard_logger = TensorBoardLogger(args.id, args.log_dir, args.log_params)
 
     start_epoch, start_iter, optim_state = 0, 0, None
-    best_loss, best_auc, losses, aucs, recall_0, recall_1 = {}, {}, {}, {}, {}, {}
+    # far; False alarm rate = 1 - specificity
+    best_loss, best_far, losses, far, recall = {}, {}, {}, {}, {}
     for phase in ['train', 'val']:
-        best_loss[phase], best_auc[phase] = 1000, 0
-        losses[phase], recall_0[phase], recall_1[phase], aucs[phase] = (AverageMeter() for i in range(4))
+        best_loss[phase], best_far[phase] = 1000, 1.0
+        losses[phase], recall[phase], far[phase] = (AverageMeter() for i in range(3))
+
+    # init setting
     eeg_conf = set_eeg_conf(args)
     model = set_model(args, eeg_conf)
     model = model.to(device)
-    dataloaders = set_dataloaders(args, eeg_conf)
+    dataloaders = set_dataloaders(args, eeg_conf, device)
 
     parameters = model.parameters()
-    optimizer = torch.optim.SGD(parameters, lr=args.lr,
-                                momentum=args.momentum, nesterov=True, weight_decay=1e-5)
+    optimizer = torch.optim.SGD(parameters, lr=args.lr)
 
-    criterion = nn.CrossEntropyLoss(weight=torch.Tensor([1.0, args.pos_loss_weight]).to(device))
+    criterion = nn.CrossEntropyLoss(weight=torch.tensor([1.0, args.pos_loss_weight]).to(device))
     batch_time = AverageMeter()
 
     for epoch in range(start_epoch, args.epochs):
@@ -141,8 +142,6 @@ if __name__ == '__main__':
             for i, (inputs, labels) in enumerate(dataloaders[phase]):
                 data_load_time = time.time() - start_time
                 # print('data loading time', data_load_time)
-                inputs = inputs.to(device)
-                labels = labels.to(device)
 
                 optimizer.zero_grad()
 
@@ -160,46 +159,37 @@ if __name__ == '__main__':
 
                 # save loss and recall in one batch
                 losses[phase].update(loss.item() / inputs.size(0), inputs.size(0))
-                # recall = sklearn.metrics.recall_score(labels.cpu(), preds.cpu(), average=None)
-                recall = torch.Tensor([0, 0]).to(device)
-                if len(recall) == 2:
-                    recall_0[phase].update(recall[0])
-                    recall_1[phase].update(recall[1])
-                else:
-                    recall_0[phase].update(recall[0]) if not labels.sum() else recall_1[phase].update(recall[0])
+                recall[phase].update(recall_rate(labels, preds).item())
+                far[phase].update(false_detection_rate(labels, preds).item())
 
                 # measure elapsed time
                 batch_time.update(time.time() - start_time)
 
                 if not args.silent:
-                    print('Epoch: [{0}][{1}/{2}] \tTime {batch_time.val:.3f} ({batch_time.avg:.3f}) \t'
-                          # 'rec_0 {rec_0.val:.3f} rec_1 {rec_1.val:.3f} '
+                    print('Epoch: [{0}][{1}/{2}] \tTime {batch_time.val:.3f} \t'
+                          'recall {recall.val:.3f} far {far.val:.3f} '
                           '\tLoss {loss.val:.4f} ({loss.avg:.4f}) \t'.format(
                         epoch, (i + 1), len(dataloaders[phase]), batch_time=batch_time,
-                        # rec_0=recall_0[phase], rec_1=recall_1[phase],
-                        loss=losses[phase]))
+                        recall=recall[phase], far=far[phase], loss=losses[phase]))
 
                 start_time = time.time()
-
-            # aucs[phase].update(sklearn.metrics.roc_auc_score(epoch_labels.cpu().numpy(), epoch_preds.cpu().numpy()))
 
             if losses[phase].avg < best_loss[phase]:
                 best_loss[phase] = losses[phase].avg
                 if phase == 'val':
                     print("Found better validated model, saving to %s" % args.model_path)
                     torch.save(model.state_dict(), args.model_path)
-            #
-            # if aucs[phase].avg > best_auc[phase]:
-            #     best_auc[phase] = aucs[phase].avg
+
+            if far[phase].avg < best_far[phase]:
+                best_far[phase] = far[phase].avg
 
             if args.tensorboard:
                 if args.log_params:
                     raise NotImplementedError
                 values = {
                     phase + '_loss': losses[phase].avg,
-                    phase + '_rec_0': recall_0[phase].avg,
-                    phase + '_rec_1': recall_1[phase].avg,
-                    # phase + '_auc': aucs[phase].avg,
+                    phase + '_recall': recall[phase].avg,
+                    phase + '_far': far[phase].avg,
                 }
                 tensorboard_logger.update(epoch, values, model.named_parameters())
 
@@ -211,8 +201,8 @@ if __name__ == '__main__':
                 print('Learning rate annealed to: {lr:.6f}'.format(lr=g['lr']))
 
             losses[phase].reset()
-            recall_0[phase].reset()
-            recall_1[phase].reset()
+            recall[phase].reset()
+            recall[phase].reset()
 
     if args.test:
         # test phase

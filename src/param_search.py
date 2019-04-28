@@ -3,48 +3,7 @@ import subprocess
 import copy
 from tqdm import tqdm
 from pathlib import Path
-
-
-def preprocess_args():
-    parser = argparse.ArgumentParser(description='preprocess arguments')
-    parser.add_argument('--out-dir', metavar='DIR',
-                        help='directory to save splitted data', default='input/splitted')
-    parser.add_argument('--patients-dir', metavar='DIR',
-                        help='directory where patients data placed', default='input/splitted')
-    parser.add_argument('--duration', type=str,
-                        help='duration of one splitted wave', default=1.0)
-
-    return parser.parse_args()
-
-
-def search_args():
-    parser = argparse.ArgumentParser(description='training arguments')
-    parser.add_argument('--sub-path', default='../output/sth.csv', type=str, help='submission file save folder name')
-    parser.add_argument('--model-path', metavar='DIR', help='directory to save models', default='../model/sth.pth')
-    parser.add_argument('--train-manifest', type=str, help='manifest file for training', default='input/train_manifest.csv')
-    parser.add_argument('--val-manifest', type=str, help='manifest file for validation', default='input/val_manifest.csv')
-    parser.add_argument('--test-manifest', type=str, help='manifest file for test', default='input/test_manifest.csv')
-    parser.add_argument('--log-dir', type=str, help='tensorboard log dir', default='../log/tensorboard/')
-    parser.add_argument('--epochs', default=30, type=int, help='Number of training epochs')
-    parser.add_argument('--gpu-id', default=0, type=int, help='ID of GPU to use')
-
-    parser.add_argument('--model-name', default='cnn_16_751_751', type=str, help='network model name')
-    parser.add_argument('--batch-size', default='32', type=str, help='Batch size for training')
-    parser.add_argument('--epoch-rate', default='1.0', type=str, help='Data rate to to use in one epoch')
-    parser.add_argument('--window-size', default='1.0', type=str, help='Window size for spectrogram in seconds')
-    parser.add_argument('--window-stride', default='0.05', type=str, help='Window stride for spectrogram in seconds')
-    parser.add_argument('--window', default='hamming', help='Window type for spectrogram generation')
-    parser.add_argument('--rnn-type', default='gru', help='Type of the RNN. rnn|gru|lstm are supported')
-    parser.add_argument('--lr', '--learning-rate', default='3e-2', type=str, help='initial learning rate')
-    parser.add_argument('--momentum', default='0.9', type=str, help='momentum')
-    parser.add_argument('--learning-anneal', default='1.1', type=str,
-                        help='Annealing applied to learning rate every epoch')
-    parser.add_argument('--sample-rate', default='1500', type=str, help='Sample rate')
-    parser.add_argument('--hidden-layers', default='2', type=str, help='Number of RNN layers')
-    parser.add_argument('--hidden-size', default='400', type=str, help='Hidden size of RNNs')
-    parser.add_argument('--pos-loss-weight', default='1.0', type=str, help='The weights of positive class loss')
-
-    return parser.parse_args()
+from args import search_args
 
 
 if __name__ == '__main__':
