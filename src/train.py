@@ -145,6 +145,10 @@ if __name__ == '__main__':
 
                 optimizer.zero_grad()
 
+                # feature scaling
+                if args.scaling:
+                    inputs = (inputs - 100).div(600)
+
                 with torch.set_grad_enabled(phase == 'train'):
                     outputs = model(inputs)
                     # print('forward calculation time', time.time() - (data_load_time + start_time))
