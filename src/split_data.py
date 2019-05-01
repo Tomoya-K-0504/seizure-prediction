@@ -8,7 +8,7 @@ partial_name_list = ['train', 'val', 'test']
 class_names = ['preictal', 'interictal']
 
 from eeglibrary import from_mat
-from args import preprocess_args
+from args import split_args
 
 
 def data_split(wave, out_dir) -> list:
@@ -98,7 +98,7 @@ def compile_manifests(args):
 
 
 if __name__ == '__main__':
-    args = preprocess_args()
+    args = split_args()
     remove_mac_folder(args.patients_dir)
     proc_list = []
     for patient in Path(args.patients_dir).iterdir():

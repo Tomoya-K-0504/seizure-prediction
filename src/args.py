@@ -1,8 +1,8 @@
 import argparse
 
 
-def preprocess_args():
-    parser = argparse.ArgumentParser(description='preprocess arguments')
+def split_args():
+    parser = argparse.ArgumentParser(description='Data split arguments')
     parser.add_argument('--out-dir', metavar='DIR',
                         help='directory to save splitted data', default='input/splitted')
     parser.add_argument('--patients-dir', metavar='DIR',
@@ -13,56 +13,93 @@ def preprocess_args():
     return parser.parse_args()
 
 
+def add_preprocess_args(parser):
+
+    prep_parser = parser.add_argument_group("Preprocess options")
+
+    prep_parser.add_argument('--scaling', dest='scaling', action='store_true', help='Feature scaling or not')
+    prep_parser.add_argument('--augment', dest='augment', action='store_true',
+                        help='Use random tempo and gain perturbations.')
+    prep_parser.add_argument('--duration', default=1.0, type=float, help='Duration of one EEG dataset')
+    prep_parser.add_argument('--window-size', default=4.0, type=float, help='Window size for spectrogram in seconds')
+    prep_parser.add_argument('--window-stride', default=2.0, type=float, help='Window stride for spectrogram in seconds')
+    prep_parser.add_argument('--window', default='hamming', help='Window type for spectrogram generation')
+    prep_parser.add_argument('--spect', dest='spect', action='store_true', help='Use spectrogram as input')
+    prep_parser.add_argument('--sample-rate', default=1500, type=int, help='Sample rate')
+
+    return parser
+
+
+def add_nn_model_args(parser):
+
+    nn_parser = parser.add_argument_group("Neural nerwork model arguments")
+
+    nn_parser.add_argument('--model-name', default='cnn_16_751_751', type=str, help='network model name')
+    nn_parser.add_argument('--gpu-id', default=0, type=int, help='ID of GPU to use')
+
+    # RNN params
+    nn_parser.add_argument('--rnn-type', default='gru', help='Type of the RNN. rnn|gru|lstm are supported')
+    nn_parser.add_argument('--hidden-size', default=800, type=int, help='Hidden size of RNNs')
+    nn_parser.add_argument('--hidden-layers', default=5, type=int, help='Number of RNN layers')
+    nn_parser.add_argument('--no-bidirectional', dest='bidirectional', action='store_false', default=True,
+                        help='Turn off bi-directional RNNs, introduces lookahead convolution')
+
+    nn_parser.add_argument('--lr', '--learning-rate', default=3e-2, type=float, help='initial learning rate')
+    nn_parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
+    nn_parser.add_argument('--max-norm', default=400, type=int, help='Norm cutoff to prevent explosion of gradients')
+    nn_parser.add_argument('--learning-anneal', default=1.1, type=float,
+                        help='Annealing applied to learning rate every epoch')
+    nn_parser.add_argument('--checkpoint', dest='checkpoint', action='store_true',
+                        help='Enables checkpoint saving of model')
+    nn_parser.add_argument('--checkpoint-per-batch', default=0, type=int,
+                        help='Save checkpoint per batch. 0 means never save')
+
+    return parser
+
+
+def add_hyper_param_args(parser):
+
+    nn_parser = parser.add_argument_group("Hyper parameter arguments for learning")
+    nn_parser.add_argument('--batch-size', default=32, type=int, help='Batch size for training')
+    nn_parser.add_argument('--epoch-rate', default=1.0, type=float, help='Data rate to to use in one epoch')
+    nn_parser.add_argument('--num-workers', default=4, type=int, help='Number of workers used in data-loading')
+    nn_parser.add_argument('--pos-loss-weight', default=1.0, type=float, help='The weights of positive class loss')
+    nn_parser.add_argument('--epochs', default=70, type=int, help='Number of training epochs')
+    return parser
+
+
+def add_general_args(parser):
+    general_parser = parser.add_argument_group("General arguments")
+
+    general_parser.add_argument('--sub-path', default='../output/', type=str, help='submission file save folder name')
+    general_parser.add_argument('--model-path', help='Model file to load model', default='../model/sth.pth')
+
+    general_parser.add_argument('--seed', default=0, type=int, help='Seed to generators')
+    general_parser.add_argument('--cuda', dest='cuda', action='store_true', help='Use cuda to train model')
+    return parser
+
+
 def train_args():
     parser = argparse.ArgumentParser(description='training arguments')
-    parser.add_argument('--model-name', default='cnn_16_751_751', type=str, help='network model name')
-    parser.add_argument('--sub-path', default='../output/', type=str, help='submission file save folder name')
-    parser.add_argument('--seed', default=0, type=int, help='Seed to generators')
-    parser.add_argument('--thresh', default=0.5, type=float, help='Threshold in ensemble')
-    parser.add_argument('--model-path', metavar='DIR', help='directory to save models', default='../model/')
+
     parser.add_argument('--train-manifest', type=str, help='manifest file for training', default='input/train_manifest.csv')
     parser.add_argument('--val-manifest', type=str, help='manifest file for validation', default='input/val_manifest.csv')
-    parser.add_argument('--test-manifest', type=str, help='manifest file for test', default='input/test_manifest.csv')
-    parser.add_argument('--batch-size', default=32, type=int, help='Batch size for training')
-    parser.add_argument('--epoch-rate', default=1.0, type=float, help='Data rate to to use in one epoch')
-    parser.add_argument('--num-workers', default=4, type=int, help='Number of workers used in data-loading')
-    parser.add_argument('--duration', default=1.0, type=float, help='Duration of one EEG dataset')
-    parser.add_argument('--window-size', default=4.0, type=float, help='Window size for spectrogram in seconds')
-    parser.add_argument('--window-stride', default=2.0, type=float, help='Window stride for spectrogram in seconds')
-    parser.add_argument('--window', default='hamming', help='Window type for spectrogram generation')
-    parser.add_argument('--hidden-size', default=800, type=int, help='Hidden size of RNNs')
-    parser.add_argument('--hidden-layers', default=5, type=int, help='Number of RNN layers')
-    parser.add_argument('--rnn-type', default='gru', help='Type of the RNN. rnn|gru|lstm are supported')
-    parser.add_argument('--pos-loss-weight', default=1.0, type=float, help='The weights of positive class loss')
-    parser.add_argument('--epochs', default=70, type=int, help='Number of training epochs')
-    parser.add_argument('--cuda', dest='cuda', action='store_true', help='Use cuda to train model')
-    parser.add_argument('--lr', '--learning-rate', default=3e-2, type=float, help='initial learning rate')
-    parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
-    parser.add_argument('--max-norm', default=400, type=int, help='Norm cutoff to prevent explosion of gradients')
-    parser.add_argument('--learning-anneal', default=1.1, type=float,
-                        help='Annealing applied to learning rate every epoch')
-    parser.add_argument('--silent', dest='silent', action='store_true', help='Turn off progress tracking per iteration')
-    parser.add_argument('--checkpoint', dest='checkpoint', action='store_true',
-                        help='Enables checkpoint saving of model')
-    parser.add_argument('--checkpoint-per-batch', default=0, type=int,
-                        help='Save checkpoint per batch. 0 means never save')
-    parser.add_argument('--augment', dest='augment', action='store_true',
-                        help='Use random tempo and gain perturbations.')
-    parser.add_argument('--no-bidirectional', dest='bidirectional', action='store_false', default=True,
-                        help='Turn off bi-directional RNNs, introduces lookahead convolution')
-    parser.add_argument('--spect', dest='spect', action='store_true', help='Use spectrogram as input')
-    parser.add_argument('--sample-rate', default=1500, type=int, help='Sample rate')
 
+    parser = add_general_args(parser)
+    parser = add_hyper_param_args(parser)
+    parser = add_preprocess_args(parser)
+    parser = add_nn_model_args(parser)
+
+    # Logging of criterion
+    parser.add_argument('--silent', dest='silent', action='store_true', help='Turn off progress tracking per iteration')
+    parser.add_argument('--log-id', default='Seizure prediction training', help='Identifier for tensorboard run')
     parser.add_argument('--tensorboard', dest='tensorboard', action='store_true', help='Turn on tensorboard graphing')
     parser.add_argument('--log-dir', default='visualize/', help='Location of tensorboard log')
     parser.add_argument('--log-params', dest='log_params', action='store_true',
                         help='Log parameter values and gradients')
-    parser.add_argument('--id', default='Seizure prediction training', help='Identifier for tensorboard run')
-    parser.add_argument('--gpu-id', default=0, type=int, help='ID of GPU to use')
     parser.add_argument('--test', dest='test', action='store_true', help='Test phase after training or not')
-    parser.add_argument('--scaling', dest='scaling', action='store_true', help='Feature scaling or not')
+    parser = add_test_args(parser)
 
-    # parser.add_argument('--visdom', dest='visdom', action='store_true', help='Turn on visdom graphing')
     # parser.add_argument('--continue-from', default='', help='Continue from checkpoint model')
     # parser.add_argument('--finetune', dest='finetune', action='store_true',
     #                     help='Finetune the model from checkpoint "continue_from"')
@@ -76,12 +113,38 @@ def train_args():
     #                     help='Maximum noise levels to sample from. Maximum 1.0', type=float)
     # parser.add_argument('--no-shuffle', dest='no_shuffle', action='store_true',
     #                     help='Turn off shuffling and sample from dataset based on sequence length (smallest to largest)')
+    return parser
 
-    return parser.parse_args()
+
+def baseline_args():
+    parser = argparse.ArgumentParser(description='Model baseline arguments')
+    parser = add_preprocess_args(parser)
+    parser = add_test_args(parser)
+
+    return parser
+
+
+def add_test_args(parser):
+    test_parser = parser.add_argument_group("Test options")
+
+    test_parser.add_argument('--test-manifest', type=str, help='manifest file for test', default='input/test_manifest.csv')
+    test_parser.add_argument('--thresh', default=0.5, type=float, help='Threshold in ensemble')
+
+    return parser
+
+
+def test_args():
+    parser = argparse.ArgumentParser(description='Test arguments')
+    parser = add_general_args(parser)
+    parser = add_test_args(parser)
+    parser = add_preprocess_args(parser)
+    parser = add_nn_model_args(parser)
+    parser = add_hyper_param_args(parser)
+    return parser
 
 
 def search_args():
-    parser = argparse.ArgumentParser(description='training arguments')
+    parser = argparse.ArgumentParser(description='Parameter search arguments')
     parser.add_argument('--sub-path', default='../output/sth.csv', type=str, help='submission file save folder name')
     parser.add_argument('--model-path', metavar='DIR', help='directory to save models', default='../model/sth.pth')
     parser.add_argument('--train-manifest', type=str, help='manifest file for training', default='input/train_manifest.csv')
