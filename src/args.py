@@ -25,7 +25,13 @@ def add_preprocess_args(parser):
     prep_parser.add_argument('--window-stride', default=2.0, type=float, help='Window stride for spectrogram in seconds')
     prep_parser.add_argument('--window', default='hamming', help='Window type for spectrogram generation')
     prep_parser.add_argument('--spect', dest='spect', action='store_true', help='Use spectrogram as input')
-    prep_parser.add_argument('--sample-rate', default=1500, type=int, help='Sample rate')
+    prep_parser.add_argument('--sample-rate', default=400, type=int, help='Sample rate')
+    prep_parser.add_argument('--num-eigenvalue', default=0, type=int,
+                             help='Number of eigen values to use from spectrogram')
+    prep_parser.add_argument('--l-cutoff', default=0.01, type=float, help='Low pass filter')
+    prep_parser.add_argument('--h-cutoff', default=10000.0, type=float, help='High pass filter')
+    prep_parser.add_argument('--mfcc', dest='mfcc', action='store_true', help='MFCC')
+    prep_parser.add_argument('--to_1d', dest='to_1d', action='store_true', help='Preprocess inputs to 1 dimension')
 
     return parser
 
@@ -117,10 +123,11 @@ def train_args():
 
 
 def baseline_args():
-    parser = argparse.ArgumentParser(description='Model baseline arguments')
-    parser = add_preprocess_args(parser)
+    parser = argparse.ArgumentParser(description='Baseline model arguments')
+    parser = add_general_args(parser)
     parser = add_test_args(parser)
-
+    parser = add_preprocess_args(parser)
+    parser = add_hyper_param_args(parser)
     return parser
 
 

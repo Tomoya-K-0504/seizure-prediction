@@ -15,39 +15,54 @@ torch.cuda.manual_seed_all(seed)
 import random
 random.seed(seed)
 from torch.utils.data.sampler import WeightedRandomSampler
-
+from sklearn.metrics import log_loss
 from eeglibrary import EEGDataSet, EEGDataLoader, make_weights_for_balanced_classes, EEG
 from eeglibrary import TensorBoardLogger
 from eeglibrary.models.CNN import *
 from eeglibrary.models.RNN import *
 from args import train_args
 from test import test
-from utils import AverageMeter, init_seed, set_eeg_conf, init_device, set_model
+from utils import AverageMeter, init_seed, set_eeg_conf, init_device, set_model, set_dataloader, class_names
 from eeglibrary import recall_rate, false_detection_rate
-
-
-def set_dataloaders(args, eeg_conf, device='cpu'):
-    manifests = [args.train_manifest, args.val_manifest]
-
-    dataloaders = {}
-    for part, manifest in zip(['train', 'val'], manifests):
-        dataset = EEGDataSet(manifest, eeg_conf, class_names, device=device)
-        weights = make_weights_for_balanced_classes(dataset.labels_index(), len(class_names))
-        sampler = WeightedRandomSampler(weights, int(len(dataset) * args.epoch_rate))
-        dataloaders[part] = EEGDataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers,
-                                          pin_memory=True, sampler=sampler, drop_last=True)
-    return dataloaders
 
 
 def train_all():
     subject_dir_names = ['Dog_1', 'Dog_2', 'Dog_3', 'Dog_4', 'Dog_5', 'Patient_1', 'Patient_2']
-    pass
+    raise NotImplementedError
 
 
-if __name__ == '__main__':
+def train_model(model, inputs, labels, phase, optimizer, criterion, type='nn'):
 
-    class_names = ['interictal', 'preictal']
+    if type == 'nn':
+        optimizer.zero_grad()
+        with torch.set_grad_enabled(phase == 'train'):
+            outputs = model(inputs)
+            # print('forward calculation time', time.time() - (data_load_time + start_time))
+            loss = criterion(outputs, labels)
 
+            if phase == 'train':
+                loss.backward()
+                optimizer.step()
+
+            _, preds = torch.max(outputs, 1)
+    else:
+        inputs, labels = inputs.data.numpy(), labels.data.numpy()
+        if phase == 'train':
+            model.partial_fit(inputs, labels)
+        preds = model.predict(inputs)
+        loss = criterion(labels, preds, labels=[0, 1])  # logloss of skearn is reverse argment order compared with pytorch criterion
+
+    return preds, loss
+
+
+def save_model(model, model_path, numpy):
+    if numpy:
+        model.save_model(model_path)
+    else:
+        torch.save(model.state_dict(), model_path)
+
+
+def train():
     args = train_args().parse_args()
     init_seed(args)
     Path(args.model_path).parent.mkdir(exist_ok=True)
@@ -65,13 +80,19 @@ if __name__ == '__main__':
     # init setting
     device = init_device(args)
     eeg_conf = set_eeg_conf(args)
-    model = set_model(args, eeg_conf, device, class_names)
-    dataloaders = set_dataloaders(args, eeg_conf, device)
+    model = set_model(args, eeg_conf, device)
+    dataloaders = {phase: set_dataloader(args, eeg_conf, phase, device='cpu') for phase in ['train', 'val']}
 
-    parameters = model.parameters()
-    optimizer = torch.optim.SGD(parameters, lr=args.lr)
+    if 'nn' in args.model_name:
+        parameters = model.parameters()
+        optimizer = torch.optim.SGD(parameters, lr=args.lr)
+        criterion = nn.CrossEntropyLoss(weight=torch.tensor([1.0, args.pos_loss_weight]).to(device))
+        numpy = False
+    else:
+        optimizer = None
+        criterion = log_loss
+        numpy = True
 
-    criterion = nn.CrossEntropyLoss(weight=torch.tensor([1.0, args.pos_loss_weight]).to(device))
     batch_time = AverageMeter()
     execute_time = time.time()
 
@@ -84,35 +105,29 @@ if __name__ == '__main__':
             epoch_preds = torch.empty((len(dataloaders[phase])*args.batch_size, 1), dtype=torch.int64, device=device)
             epoch_labels = torch.empty((len(dataloaders[phase])*args.batch_size, 1), dtype=torch.int64, device=device)
 
+            if numpy:
+                epoch_preds, epoch_labels = epoch_preds.data.numpy(), epoch_labels.data.numpy()
+
             start_time = time.time()
             for i, (inputs, labels) in enumerate(dataloaders[phase]):
                 inputs, labels = inputs.to(device), labels.to(device)
-                break
+                # break
                 data_load_time = time.time() - start_time
                 # print('data loading time', data_load_time)
-
-                optimizer.zero_grad()
 
                 # feature scaling
                 if args.scaling:
                     inputs = (inputs - 100).div(600)
 
-                with torch.set_grad_enabled(phase == 'train'):
-                    outputs = model(inputs)
-                    # print('forward calculation time', time.time() - (data_load_time + start_time))
-                    _, preds = torch.max(outputs, 1)
-                    epoch_preds[i*args.batch_size:(i+1)*args.batch_size, 0] = preds
-                    epoch_labels[i*args.batch_size:(i+1)*args.batch_size, 0] = labels
-                    loss = criterion(outputs, labels)
+                preds, loss_value = train_model(model, inputs, labels, phase, optimizer, criterion, args.model_name)
 
-                    if phase == 'train':
-                        loss.backward()
-                        optimizer.step()
+                epoch_preds[i * args.batch_size:(i + 1) * args.batch_size, 0] = preds
+                epoch_labels[i * args.batch_size:(i + 1) * args.batch_size, 0] = labels
 
                 # save loss and recall in one batch
-                losses[phase].update(loss.item() / inputs.size(0), inputs.size(0))
-                recall[phase].update(recall_rate(labels, preds).item())
-                far[phase].update(false_detection_rate(labels, preds).item())
+                losses[phase].update(loss_value / inputs.size(0), inputs.size(0))
+                recall[phase].update(recall_rate(preds, labels, numpy))
+                far[phase].update(false_detection_rate(preds, labels, numpy))
 
                 # measure elapsed time
                 batch_time.update(time.time() - start_time)
@@ -130,7 +145,7 @@ if __name__ == '__main__':
                 best_loss[phase] = losses[phase].avg
                 if phase == 'val':
                     print("Found better validated model, saving to %s" % args.model_path)
-                    torch.save(model.state_dict(), args.model_path)
+                    save_model(model, args.model_path, numpy)
 
             if far[phase].avg < best_far[phase]:
                 best_far[phase] = far[phase].avg
@@ -143,10 +158,10 @@ if __name__ == '__main__':
                     phase + '_recall': recall[phase].avg,
                     phase + '_far': far[phase].avg,
                 }
-                tensorboard_logger.update(epoch, values, model.named_parameters())
+                tensorboard_logger.update(epoch, values)
 
             # anneal lr
-            if phase == 'train':
+            if phase == 'train' and (not numpy):
                 param_groups = optimizer.param_groups
                 for g in param_groups:
                     g['lr'] = g['lr'] / args.learning_anneal
@@ -160,4 +175,8 @@ if __name__ == '__main__':
 
     if args.test:
         # test phase
-        test(args, device, class_names)
+        test(args, numpy, device)
+
+
+if __name__ == '__main__':
+    train()

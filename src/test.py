@@ -1,55 +1,40 @@
 from __future__ import print_function, division
 
-import numpy as np
 import pandas as pd
-import torch
-from tqdm import tqdm
-import argparse
-
-from eeglibrary.models.CNN import *
-from eeglibrary.models.RNN import *
 from args import test_args
-from eeglibrary import EEGDataSet, EEGDataLoader, make_weights_for_balanced_classes, EEG
-from utils import AverageMeter, init_seed, set_eeg_conf, set_model, init_device
-
-supported_rnns = {
-    'lstm': nn.LSTM,
-    'rnn': nn.RNN,
-    'gru': nn.GRU
-}
-
-supported_rnns_inv = dict((v, k) for k, v in supported_rnns.items())
+from eeglibrary import EEGDataSet, EEGDataLoader
+from eeglibrary.models.RNN import *
+from tqdm import tqdm
+from utils import init_seed, set_eeg_conf, set_model, init_device, set_dataloader, class_names
 
 subject_dir_names = ['Dog_1', 'Dog_2', 'Dog_3', 'Dog_4', 'Dog_5', 'Patient_1', 'Patient_2']
-partial_name_list = ['train', 'val', 'test']
-class_names = ['interictal', 'preictal']
 
 
-def set_dataloaders(args, eeg_conf, device='cpu'):
-    dataset = EEGDataSet(args.test_manifest, eeg_conf, return_path=True)
-    dataloader = EEGDataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers,
-                                      pin_memory=True, shuffle=False)
-    return dataloader
-
-
-def test(args, device, class_names):
+def test(args, numpy, device):
 
     eeg_conf = set_eeg_conf(args)
-    dataloader = set_dataloaders(args, eeg_conf, device)
-    model = set_model(args, eeg_conf, device, class_names)
-    model.load_state_dict(torch.load(args.model_path))
-    model.eval()
+    dataloader = set_dataloader(args, eeg_conf, phase='test', device=device)
+
+    model = set_model(args, eeg_conf, device)
+    if numpy:
+        model.load_model_(args.model_path)
+    else:
+        model.load_state_dict(torch.load(args.model_path))
+        model.eval()
     pred_list = []
     path_list = []
 
     for i, (inputs, paths) in tqdm(enumerate(dataloader), total=len(dataloader)):
         inputs = inputs.to(device)
 
-        outputs = model(inputs)
-        _, preds = torch.max(outputs, 1)
+        if numpy:
+            preds = model.predict(inputs)
+        else:
+            outputs = model(inputs)
+            _, preds = torch.max(outputs, 1)
         pred_list.extend(preds)
         # Transpose paths, but I don't know why dataloader outputs aukward
-        path_list.extend([pd.DataFrame(paths).iloc[:, i].values for i in range(len(paths[0]))])
+        path_list.extend([list(pd.DataFrame(paths).iloc[:, i].values) for i in range(len(paths[0]))])
 
     def ensemble_preds(pred_list, path_list, sub_df, thresh):
         # もともとのmatファイルごとに振り分け直す
@@ -83,6 +68,4 @@ if __name__ == '__main__':
     init_seed(args)
     device = init_device(args)
 
-    class_names = ['interictal', 'preictal']
-
-    test(args, device, class_names)
+    test(args, device)

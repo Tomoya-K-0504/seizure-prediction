@@ -20,8 +20,11 @@ from eeglibrary import EEGDataSet, EEGDataLoader, make_weights_for_balanced_clas
 from eeglibrary import TensorBoardLogger
 from eeglibrary.models.CNN import *
 from eeglibrary.models.RNN import *
+from eeglibrary.models.toolbox import *
 from args import train_args, add_test_args
 from eeglibrary import recall_rate, false_detection_rate
+
+class_names = ['interictal', 'preictal']
 
 
 class AverageMeter(object):
@@ -68,11 +71,28 @@ def set_eeg_conf(args):
                     window_size=args.window_size,
                     window_stride=args.window_stride,
                     window='hamming',
-                    sample_rate=args.sample_rate)
+                    sample_rate=args.sample_rate,
+                    low_cutoff=args.l_cutoff,
+                    high_cutoff=args.h_cutoff)
     return eeg_conf
 
 
-def set_model(args, eeg_conf, device, class_names):
+def set_dataloader(args, eeg_conf, phase, device='cpu'):
+    if phase == 'test':
+        dataset = EEGDataSet(args.test_manifest, eeg_conf, args.to_1d, classes=None, return_path=True)
+        dataloader = EEGDataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers,
+                                          pin_memory=True, shuffle=False)
+    else:
+        manifest_path = [value for key, value in vars(args).items() if phase in key][0]
+        dataset = EEGDataSet(manifest_path, eeg_conf, args.to_1d, class_names, device=device)
+        weights = make_weights_for_balanced_classes(dataset.labels_index(), len(class_names))
+        sampler = WeightedRandomSampler(weights, int(len(dataset) * args.epoch_rate))
+        dataloader = EEGDataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers,
+                                          pin_memory=True, sampler=sampler, drop_last=True)
+    return dataloader
+
+
+def set_model(args, eeg_conf, device):
     if args.model_name == 'cnn_1_16_399':
         model = cnn_1_16_399(eeg_conf, n_labels=len(class_names))
     elif args.model_name == 'cnn_16_751_751':
@@ -82,10 +102,18 @@ def set_model(args, eeg_conf, device, class_names):
         model = RNN(cnn, out_ftrs, args.batch_size, args.rnn_type, class_names, eeg_conf=eeg_conf)
     elif args.model_name == 'cnn_1_16_751_751':
         model = cnn_1_16_751_751(eeg_conf, n_labels=len(class_names))
+    elif args.model_name == 'xgboost':
+        model = XGBoost(list(range(len(class_names))))
+    elif args.model_name == 'sgdc':
+        model = SGDC(list(range(len(class_names))))
+    elif args.model_name in ['kneighbor', 'knn']:
+        args.model_name = 'kneighbor'
+        model = KNN(list(range(len(class_names))))
     else:
         raise NotImplementedError
 
-    model = model.to(device)
-    print(model)
+    if 'nn' in args.model_name:
+        model = model.to(device)
+        print(model)
 
     return model
