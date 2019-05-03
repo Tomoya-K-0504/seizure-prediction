@@ -22,13 +22,8 @@ from eeglibrary.models.CNN import *
 from eeglibrary.models.RNN import *
 from args import train_args
 from test import test
-from utils import AverageMeter, init_seed, set_eeg_conf, init_device, set_model, set_dataloader, class_names
+from utils import *
 from eeglibrary import recall_rate, false_detection_rate
-
-
-def train_all():
-    subject_dir_names = ['Dog_1', 'Dog_2', 'Dog_3', 'Dog_4', 'Dog_5', 'Patient_1', 'Patient_2']
-    raise NotImplementedError
 
 
 def train_model(model, inputs, labels, phase, optimizer, criterion, type='nn'):
@@ -62,8 +57,7 @@ def save_model(model, model_path, numpy):
         torch.save(model.state_dict(), model_path)
 
 
-def train():
-    args = train_args().parse_args()
+def train(args):
     init_seed(args)
     Path(args.model_path).parent.mkdir(exist_ok=True)
 
@@ -179,4 +173,10 @@ def train():
 
 
 if __name__ == '__main__':
-    train()
+    args = train_args().parse_args()
+    if args.train_manifest == 'all':
+        for sub_name in subject_dir_names:
+            args = arrange_paths(args, sub_name)
+            train(args)
+    else:
+        train(args)

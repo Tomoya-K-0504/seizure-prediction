@@ -5,10 +5,7 @@ from args import test_args
 from eeglibrary import EEGDataSet, EEGDataLoader
 from eeglibrary.models.RNN import *
 from tqdm import tqdm
-from utils import init_seed, set_eeg_conf, set_model, init_device, set_dataloader, class_names
-
-subject_dir_names = ['Dog_1', 'Dog_2', 'Dog_3', 'Dog_4', 'Dog_5', 'Patient_1', 'Patient_2']
-
+from utils import *
 
 def test(args, numpy, device):
 
@@ -67,5 +64,13 @@ if __name__ == '__main__':
     args = test_args().parse_args()
     init_seed(args)
     device = init_device(args)
+    if args.model_name in ['kneighbor', 'knn']:
+        args.model_name = 'kneighbor'
+    numpy = 'nn' not in args.model_name
 
-    test(args, device)
+    if args.test_manifest == 'all':
+        for sub_name in subject_dir_names:
+            args = arrange_paths(args, sub_name)
+            test(args, numpy, device)
+    else:
+        test(args, numpy, device)
