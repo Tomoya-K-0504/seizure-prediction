@@ -136,6 +136,7 @@ def add_test_args(parser):
 
     test_parser.add_argument('--test-manifest', type=str, help='manifest file for test', default='input/test_manifest.csv')
     test_parser.add_argument('--thresh', default=0.5, type=float, help='Threshold in ensemble')
+    test_parser.add_argument('--only-results', action='store_true', help='Show only prediction in the output csv')
 
     return parser
 

@@ -163,7 +163,7 @@ def train(args):
 
             losses[phase].reset()
             recall[phase].reset()
-            recall[phase].reset()
+            far[phase].reset()
 
     print('execution time was {}'.format(time.time() - execute_time))
 

@@ -55,6 +55,10 @@ def test(args, numpy, device):
     sub_df.loc[pred_df.index, 'preictal'] = pred_df['preictal']
     sub_df.to_csv(args.sub_path, index=False)
 
+    print_preds(sub_df)
+
+
+def print_preds(sub_df):
     for subject in subject_dir_names:
         subject_df = sub_df.loc[sub_df['clip'].apply(lambda x: subject in x), 'preictal']
         print(subject, '\n', subject_df.value_counts(normalize=True))
@@ -67,6 +71,11 @@ if __name__ == '__main__':
     if args.model_name in ['kneighbor', 'knn']:
         args.model_name = 'kneighbor'
     numpy = 'nn' not in args.model_name
+
+    if args.only_results:
+        sub_df = pd.read_csv(args.sub_path, engine='python')
+        print_preds(sub_df)
+        exit()
 
     if args.test_manifest == 'all':
         for sub_name in subject_dir_names:
