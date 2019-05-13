@@ -28,7 +28,7 @@ from eeglibrary import recall_rate, false_detection_rate
 
 def train_model(model, inputs, labels, phase, optimizer, criterion, type='nn'):
 
-    if type == 'nn':
+    if 'nn' in type:
         optimizer.zero_grad()
         with torch.set_grad_enabled(phase == 'train'):
             outputs = model(inputs)

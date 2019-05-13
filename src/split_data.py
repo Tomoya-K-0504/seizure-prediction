@@ -11,7 +11,7 @@ from eeglibrary import from_mat
 from args import split_args
 
 
-def data_split(wave, out_dir) -> list:
+def data_split(wave, out_dir, duration=10.0) -> list:
     """
     1. load eeg
     2. split
@@ -24,7 +24,7 @@ def data_split(wave, out_dir) -> list:
     eeg = from_mat(wave, mat_col)
     out_paths = []
 
-    splitted_eeg = eeg.split(window_size=1.0, window_stride='same')
+    splitted_eeg = eeg.split(window_size=duration, window_stride='same')
     for i, eeg in enumerate(splitted_eeg):
         # print(eeg.values.shape[1])
         # assert eeg.values.shape[1] == 399, "eeg don't have enough length, which is 399"
@@ -71,7 +71,7 @@ def preprocess(args, patient_path):
                 continue
             if class_name != 'test':
                 prev_classes.append(class_name)
-            wave_paths[part.name].extend(data_split(wave, out_dir))
+            wave_paths[part.name].extend(data_split(wave, out_dir, duration=args.duration))
 
     make_manifest(out_dir, wave_paths)
 
