@@ -6,9 +6,9 @@ def split_args():
     parser.add_argument('--out-dir', metavar='DIR',
                         help='directory to save splitted data', default='input/splitted')
     parser.add_argument('--patients-dir', metavar='DIR',
-                        help='directory where patients data placed', default='input/splitted')
+                        help='directory where patients data placed', default='input/')
     parser.add_argument('--duration', type=float,
-                        help='duration of one splitted wave', default=1.0)
+                        help='duration of one splitted wave', default=10.0)
 
     return parser.parse_args()
 
@@ -45,8 +45,8 @@ def add_nn_model_args(parser):
 
     # RNN params
     nn_parser.add_argument('--rnn-type', default='gru', help='Type of the RNN. rnn|gru|lstm are supported')
-    nn_parser.add_argument('--hidden-size', default=800, type=int, help='Hidden size of RNNs')
-    nn_parser.add_argument('--hidden-layers', default=5, type=int, help='Number of RNN layers')
+    nn_parser.add_argument('--rnn-hidden-size', default=400, type=int, help='Hidden size of RNNs')
+    nn_parser.add_argument('--rnn-n-layers', default=3, type=int, help='Number of RNN layers')
     nn_parser.add_argument('--no-bidirectional', dest='bidirectional', action='store_false', default=True,
                         help='Turn off bi-directional RNNs, introduces lookahead convolution')
 

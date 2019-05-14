@@ -28,21 +28,24 @@ def data_split(wave, out_dir, duration=10.0) -> list:
     for i, eeg in enumerate(splitted_eeg):
         # print(eeg.values.shape[1])
         # assert eeg.values.shape[1] == 399, "eeg don't have enough length, which is 399"
-        out_file = Path(out_dir / mat_col / '{}.pkl'.format(i*eeg.sr))
+        out_file = Path(out_dir / mat_col / '{}.pkl'.format(i * int(duration) * eeg.sr))
         eeg.to_pkl(out_file)
         out_paths.append(out_file.resolve())
 
     return out_paths
 
 
-def make_manifest(out_dir, wave_paths) -> None:
+def make_manifest(out_dir, paths) -> None:
     """
-    1. wave_pathsからtrainとtestを分ける
+    1. pathsからtrainとtestを分ける
     2. csvにしてout_dirに保存
     :return:
     """
-    for part in wave_paths.keys():
-        pd.DataFrame(wave_paths[part]).to_csv('{}/{}_manifest.csv'.format(out_dir, part), header=None, index=False)
+    train_paths = paths['preictal'][:len(paths['preictal'])*8//10] + paths['interictal'][:len(paths['interictal'])*8//10]
+    val_paths = paths['preictal'][len(paths['preictal'])*8//10:] + paths['interictal'][len(paths['interictal'])*8//10:]
+    pd.DataFrame(train_paths).to_csv(out_dir / 'train_manifest.csv', header=None, index=False)
+    pd.DataFrame(val_paths).to_csv(out_dir / 'val_manifest.csv', header=None, index=False)
+    pd.DataFrame(paths['test']).to_csv(out_dir / 'test_manifest.csv', header=None, index=False)
 
 
 def preprocess(args, patient_path):
@@ -59,20 +62,12 @@ def preprocess(args, patient_path):
 
     out_dir = initialize_folders(args, patient_path.name)
 
-    wave_paths = {part: [] for part in partial_name_list}
-    partials = Path(patient_path).iterdir()
-    for part in partials:
-        print('{} of {} is now processing...'.format(part.name, patient_path.name))
-        waves = Path(part).iterdir()
-        prev_classes = []
-        for wave in waves:
-            class_name = wave.name.split('_')[2]
-            if class_name in prev_classes:
-                continue
-            if class_name != 'test':
-                prev_classes.append(class_name)
-            wave_paths[part.name].extend(data_split(wave, out_dir, duration=args.duration))
-
+    wave_paths = {'preictal': [], 'interictal': [], 'test': []}
+    print('{} is now processing...'.format(patient_path.name))
+    waves = Path(patient_path).iterdir()
+    for wave in waves:
+        class_name = wave.name.split('_')[2]
+        wave_paths[class_name].extend(data_split(wave, out_dir, duration=args.duration))
     make_manifest(out_dir, wave_paths)
 
 
@@ -99,6 +94,7 @@ def compile_manifests(args):
 
 if __name__ == '__main__':
     args = split_args()
+    Path(args.out_dir).mkdir(exist_ok=True, parents=True)
     remove_mac_folder(args.patients_dir)
     proc_list = []
     for patient in Path(args.patients_dir).iterdir():
@@ -108,4 +104,4 @@ if __name__ == '__main__':
 
     [p.join() for p in proc_list]
 
-    compile_manifests(args)
+    # compile_manifests(args)
