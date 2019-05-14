@@ -4,7 +4,7 @@ import pandas as pd
 from eeglibrary.src import test
 from eeglibrary.utils import test_args
 
-from src.utils import arrange_paths, class_names, subject_dir_names
+from eeglibrary.utils import arrange_paths
 
 
 def print_preds(sub_df):
