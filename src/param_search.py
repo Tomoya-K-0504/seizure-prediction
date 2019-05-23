@@ -3,15 +3,42 @@ import subprocess
 import copy
 from tqdm import tqdm
 from pathlib import Path
-from args import search_args
+from eeglibrary.utils import search_args
+import optuna
+
+one_args = ['sub_path', 'model_path', 'train_manifest', 'val_manifest', 'test_manifest', 'log_dir', 'epochs', 'gpu_id']
+str_args = ['model_name', 'window', 'rnn_type', 'loss_weight']
+int_args = ['batch_size', 'sample_rate', 'rnn_n_layers', 'rnn_hidden_size']
 
 
-if __name__ == '__main__':
+def choose_args(trial, arg_name, arg_values):
+    return trial.suggest_categorical(arg_name, arg_values)
+
+
+def objective(trial=optuna.trial.Trial(optuna.create_study(direction='maximize'), 0)):
     # TODO multiprocessing対応にして、CPU・GPUの余りに応じてプロセス増やす機能
+    args_dict = {}
+    log_dir = 'log/'
+    log_id = ''
+    exec_str = '~/.conda/envs/brain/bin/python {}/train.py --tensorboard --cuda --silent '.format(Path(__file__).parent)
+    args = parse_args()
 
-    one_args = ['sub_path', 'model_path', 'train_manifest', 'val_manifest', 'test_manifest', 'log_dir', 'epochs', 'gpu_id']
-    str_args = ['model_name', 'window', 'rnn_type']
-    int_args = ['batch_size', 'sample_rate', 'hidden_layers', 'hidden_size']
+    for arg_name, value in args.items():
+        if isinstance(value, list):
+            value = choose_args(trial, arg_name, value)
+            log_dir = log_dir + arg_name + '/'
+            log_id =  log_id + value + '/'
+        exec_str += '--{} {} '.format(arg_name.replace('_', '-'), value)
+        args_dict[arg_name] = value
+
+    exec_str += '--spect ' if args_dict['model_name'] != '2dcnn_1' else ''
+    exec_str += '--log-dir {} --log-id'.format(log_dir, log_id)
+    res = subprocess.check_output(exec_str, shell=True)
+    # print(res)
+    return float(res.decode().split('\n')[-2])
+
+
+def parse_args():
 
     args = search_args()
     args_dict = {}
@@ -24,31 +51,27 @@ if __name__ == '__main__':
             args_dict[arg] = list(map(int, value.split(',')))
         else:
             args_dict[arg] = list(map(float, value.split(',')))
+    return args_dict
 
-    def make_params_gridlike(grid_params, arg, value_list):
-        new_grid_params = []
-        if grid_params:
-            for value in value_list:
-                for dic in grid_params:
-                    dic[arg] = value
-                    new_grid_params.append(copy.deepcopy(dic))
-        else:
-            dic = {}
-            for value in value_list:
-                dic[arg] = value
-                new_grid_params.append(dic)
-        return new_grid_params
 
-    grid_params = []
-    for arg, value in args_dict.items():
-        if isinstance(value, list):
-            grid_params = make_params_gridlike(grid_params, arg, value)
-    base_exec_str = 'python {}/train.py --tensorboard --cuda '.format(Path(__file__).parent)
-    base_exec_str += ' '.join(['--{} {}'.format(one_arg.replace('_', '-'), args_dict[one_arg]) for one_arg in one_args])
-    for params_dict in tqdm(grid_params):
-        exec_str = base_exec_str + ' ' + ' '.join(['--{} {}'.format(arg.replace('_', '-'), value) for arg, value in params_dict.items()])
-        exec_str += ' --spect' if params_dict['model_name'] != 'cnn_1_16_399' else ''
-        id_name = '_'.join(list(map(str, params_dict.values())))
-        exec_str += ' --id {}'.format(id_name)
-        _ = subprocess.check_output(exec_str, shell=True)
-        # print(_)
+if __name__ == '__main__':
+    # objective()
+    study = optuna.create_study(direction='minimize')
+    study.optimize(objective, n_trials=1, n_jobs=1)
+    print('Number of finished trials: ', len(study.trials))
+
+    print('Best trial:')
+    trial = study.best_trial
+
+    print('  Value: ', trial.value)
+
+    print('  Params: ')
+    for key, value in trial.params.items():
+        print('    {}: {}'.format(key, value))
+
+    import pickle
+    with open('study_2.pkl', 'wb') as f:
+        pickle.dump(study, f)
+
+    with open('study_2.pkl', 'rb') as f:
+        study = pickle.load(f)
