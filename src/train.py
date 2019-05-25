@@ -21,6 +21,6 @@ if __name__ == '__main__':
     if args.train_manifest == 'all':
         for sub_name in subject_dir_names:
             args = arrange_paths(args, sub_name)
-            train(args, class_names, label_func)
+            train(args, class_names, label_func, metrics)
     else:
         train(args, class_names, label_func, metrics)

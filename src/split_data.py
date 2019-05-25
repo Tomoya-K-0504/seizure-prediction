@@ -3,12 +3,12 @@ from pathlib import Path
 
 import pandas as pd
 
-subject_dir_names = ['Dog_1', 'Dog_2', 'Dog_3', 'Dog_4', 'Dog_5', 'Patient_1', 'Patient_2']
+subject_dir_names = ['Dog_1']#, 'Dog_2', 'Dog_3', 'Dog_4', 'Dog_5', 'Patient_1', 'Patient_2']
 partial_name_list = ['train', 'val', 'test']
 class_names = ['preictal', 'interictal']
 
 from eeglibrary import from_mat
-from args import split_args
+from eeglibrary.utils import split_args
 
 
 def data_split(wave, out_dir, duration=10.0) -> list:
@@ -48,7 +48,7 @@ def make_manifest(out_dir, paths) -> None:
     pd.DataFrame(paths['test']).to_csv(out_dir / 'test_manifest.csv', header=None, index=False)
 
 
-def preprocess(args, patient_path):
+def preprocess(args, patient_path, label_func):
     """
     1. for each wave data in each patient,
        data split with args.length and save to args.out_dir
@@ -64,11 +64,12 @@ def preprocess(args, patient_path):
 
     wave_paths = {'preictal': [], 'interictal': [], 'test': []}
     print('{} is now processing...'.format(patient_path.name))
-    waves = Path(patient_path).iterdir()
-    for wave in waves:
-        class_name = wave.name.split('_')[2]
-        wave_paths[class_name].extend(data_split(wave, out_dir, duration=args.duration))
-    make_manifest(out_dir, wave_paths)
+    phases = Path(patient_path).iterdir()
+    for phase in phases:
+        for wave in Path(phase).iterdir():
+            class_name = label_func(wave.name)
+            wave_paths[class_name].extend(data_split(wave, out_dir, duration=args.duration))
+        make_manifest(out_dir, wave_paths)
 
 
 def remove_mac_folder(path):
@@ -92,13 +93,17 @@ def compile_manifests(args):
         df.to_csv('{}/manifests/{}_manifest.csv'.format(args.out_dir, part), header=None, index=False)
 
 
+def label_func(file_name):
+    return file_name.split('_')[2]
+
+
 if __name__ == '__main__':
-    args = split_args()
+    args = split_args().parse_args()
     Path(args.out_dir).mkdir(exist_ok=True, parents=True)
     remove_mac_folder(args.patients_dir)
     proc_list = []
     for patient in Path(args.patients_dir).iterdir():
-        p = Process(target=preprocess, args=(args, patient, ))
+        p = Process(target=preprocess, args=(args, patient, label_func, ))
         p.start()
         proc_list.append(p)
 
