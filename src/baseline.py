@@ -27,7 +27,8 @@ if __name__ == '__main__':
     init_seed(args)
 
     eeg_conf = set_eeg_conf(args)
-    dataloaders = {phase: set_dataloader(args, eeg_conf, phase, device='cpu') for phase in ['train', 'val', 'test']}
+    dataloaders = {phase: set_dataloader(args, eeg_conf, phase, label_func, device='cpu')
+                   for phase in ['train', 'val', 'test']}
     models = None
 
     for phase in ['train', 'val']:
